@@ -123,8 +123,11 @@ def _find_target_word_in_tokenized_text(tokenizer, tokenized_input_text, word: s
     current_word = ""
     start_index = 0
 
-    zipped = zip(tokenized_input_text["input_ids"][0], tokenized_input_text.word_ids())
-    for index, (input_id, word_id) in enumerate(zipped):
+    # Do not call BatchEncoding.word_ids() here.  It is only available for
+    # fast (Rust) tokenizers, while some Hugging Face models provide only a
+    # slow Python tokenizer.  The matching logic below uses token positions
+    # and decoded token text, not word IDs, so input IDs are sufficient.
+    for index, input_id in enumerate(tokenized_input_text["input_ids"][0]):
         token = tokenizer.decode([input_id]).strip()
 
         # Remove subword prefix if present

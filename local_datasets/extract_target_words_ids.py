@@ -135,8 +135,9 @@ def _find_target_word_in_tokenized_text_new(tokenizer, tokenized_input_text, wor
     current_word = ""
     start_index = 0
 
-    zipped = zip(tokenized_input_text["input_ids"][0], tokenized_input_text.word_ids())
-    for index, (input_id, word_id) in enumerate(zipped):
+    # word_ids() is unavailable for slow Python tokenizers.  This helper only
+    # needs token positions and decoded token text, so input IDs are enough.
+    for index, input_id in enumerate(tokenized_input_text["input_ids"][0]):
         token = tokenizer.decode([input_id]).strip()
 
         # Remove subword prefix if present
