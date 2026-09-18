@@ -65,22 +65,60 @@ lemma, gloss, examples
 
 ## Download UberText corpora
 
-On macOS, use `curl`:
+On Linux, use `wget`:
 
 ```bash
 cd datasets_pre_defined
 
-curl -L -o ubertext.news.filter_rus_gcld+short.text_only.txt.bz2 \
+wget -O ubertext.news.filter_rus_gcld+short.text_only.txt.bz2 \
   https://lang.org.ua/static/downloads/ubertext2.0/news/sentenced/ubertext.news.filter_rus_gcld+short.text_only.txt.bz2
 
-curl -L -o ubertext.fiction.filter_rus_gcld+short.text_only.txt.bz2 \
+wget -O ubertext.fiction.filter_rus_gcld+short.text_only.txt.bz2 \
   https://lang.org.ua/static/downloads/ubertext2.0/fiction/sentenced/ubertext.fiction.filter_rus_gcld+short.text_only.txt.bz2
 
-curl -L -o ubertext.wikipedia.filter_rus_gcld+short.text_only.txt.bz2 \
+wget -O ubertext.wikipedia.filter_rus_gcld+short.text_only.txt.bz2 \
   https://lang.org.ua/static/downloads/ubertext2.0/wikipedia/sentenced/ubertext.wikipedia.filter_rus_gcld+short.text_only.txt.bz2
 
 cd ..
 ```
+
+## Evaluate models
+
+Evaluate one model:
+
+```bash
+python -m eval.eval_wsd \
+  --model-path sentence-transformers/paraphrase-multilingual-mpnet-base-v2 \
+  --tokenizer-path sentence-transformers/paraphrase-multilingual-mpnet-base-v2 \
+  --benchmark-path datasets_pre_defined/ukrainian_wsd_benchmark.jsonl \
+  --device cpu \
+  --no-reports
+```
+
+Evaluate the configured model list:
+
+```bash
+./eval_all_wsd_models.sh
+```
+
+Results are written to:
+
+```text
+wsd_model_results.csv
+```
+
+The batch evaluator runs on CPU by default and continues if an individual model fails.
+
+To use a CUDA GPU on a Linux server, call the Python evaluator directly:
+
+```bash
+python -m eval.eval_all_wsd_models \
+  --benchmark-path datasets_pre_defined/ukrainian_wsd_benchmark.jsonl \
+  --device cuda:0 \
+  --output wsd_model_results_gpu.csv
+```
+
+The root `eval_all_wsd_models.sh` launcher intentionally uses CPU by default for macOS.
 
 ## Collect sentences
 
@@ -130,48 +168,3 @@ Output:
 ```text
 local_datasets/raw_sentences/unique_lemma_sentences.jsonl
 ```
-
-## Evaluate models
-
-Evaluate one model:
-
-```bash
-python -m eval.eval_wsd \
-  --model-path sentence-transformers/paraphrase-multilingual-mpnet-base-v2 \
-  --tokenizer-path sentence-transformers/paraphrase-multilingual-mpnet-base-v2 \
-  --benchmark-path datasets_pre_defined/ukrainian_wsd_benchmark.jsonl \
-  --device cpu \
-  --no-reports
-```
-
-Evaluate the configured model list:
-
-```bash
-./eval_all_wsd_models.sh
-```
-
-Results are written to:
-
-```text
-wsd_model_results.csv
-```
-
-The batch evaluator runs on CPU by default and continues if an individual model fails.
-
-To use a CUDA GPU on a Linux server, call the Python evaluator directly:
-
-```bash
-python -m eval.eval_all_wsd_models \
-  --benchmark-path datasets_pre_defined/ukrainian_wsd_benchmark.jsonl \
-  --device cuda:0 \
-  --output wsd_model_results_gpu.csv
-```
-
-The root `eval_all_wsd_models.sh` launcher intentionally uses CPU by default for macOS.
-
-## Notes
-
-- Use `./.venv/bin/python` if the shell resolves `python3` to Homebrew’s system interpreter.
-- Do not reuse collection output filenames because the collector appends to them.
-- Keep `.DS_Store`, virtual environments, datasets, and model files out of Git.
-- `pool_targets=True` requires target-token IDs in the training data and should be validated with a smoke test before large experiments.
