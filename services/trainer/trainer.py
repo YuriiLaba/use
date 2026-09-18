@@ -205,12 +205,16 @@ class Trainer:
 
     def _setup_data(self):
         # 1. Load raw dataframes
-        if self.config.hf_dataset and self.config.hf_subset:
+        hf_dataset = getattr(self.config, "hf_dataset", None)
+        hf_subset = getattr(self.config, "hf_subset", None)
+
+        if hf_dataset and hf_subset:
             from datasets import load_dataset
+
             hf_token = os.environ.get("HF_TOKEN")
             ds = load_dataset(
-                self.config.hf_dataset,
-                self.config.hf_subset,
+                hf_dataset,
+                hf_subset,
                 token=hf_token,
                 split="train",
             )

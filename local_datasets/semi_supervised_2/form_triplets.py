@@ -99,6 +99,7 @@ def main():
     with open(OUTPUT_CSV, "w", encoding="utf-8", newline="") as csvfile:
         writer = csv.DictWriter(csvfile, fieldnames=SCHEMA)
         writer.writeheader()
+        emitted_triplets = set()
 
         for lemma, meanings in tqdm(data.items(), total=len(data)):
             for meaning_idx, meaning_data in enumerate(meanings.values()):
@@ -148,44 +149,43 @@ def main():
 
                     anchors = list(anchors)
 
-                    theoretical_max_sentences_with_anchor = (
-                        len(positives) * len(anchors) * len(negatives)
-                    )
+                    candidate_combinations = [
+                        (anchor, positive, negative)
+                        for anchor in anchors
+                        for positive in positives
+                        for negative in negatives
+                        if (lemma, anchor, positive, negative) not in emitted_triplets
+                    ]
+                    random.shuffle(candidate_combinations)
+
                     max_sentences = min(
                         recommended_sentences_with_anchor,
-                        theoretical_max_sentences_with_anchor,
+                        len(candidate_combinations),
                     )
 
-                    # if max_sentences < recommended_sentences_with_anchor:
-                    #     logging.warning(
-                    #         f"Not enough combinations for lemma '{lemma}', meaning index {meaning_idx}. "
-                    #         f"Recommended: {recommended_sentences_with_anchor}, available: {max_sentences}."
-                    #     )
+                    if max_sentences < recommended_sentences_with_anchor:
+                        logging.warning(
+                            "Not enough unique combinations for lemma '%s', "
+                            "meaning index %s. Recommended: %s, available: %s.",
+                            lemma,
+                            meaning_idx,
+                            recommended_sentences_with_anchor,
+                            max_sentences,
+                        )
 
-                    used = set()
-
-                    # for _ in range(max_sentences):
-                    for _ in range(recommended_sentences_with_anchor):
-                        positive = random.choice(positives)
-                        anchor = random.choice(anchors)
-                        negative = random.choice(negatives)
-
-                        # firstly try all unique combinations,
-                        # then allow repeats if we haven't reached the recommended number of sentences with the same anchor
-                        while (anchor, positive, negative) in used and len(
-                            used
-                        ) < theoretical_max_sentences_with_anchor:
-                            positive = random.choice(positives)
-                            anchor = random.choice(anchors)
-                            negative = random.choice(negatives)
-
-                        used.add((anchor, positive, negative))
+                    for anchor, positive, negative in candidate_combinations[
+                        :max_sentences
+                    ]:
                         _, anchor_target_ids = get_target_word_embedding_idx(
                             udpipe_model, tokenizer, anchor, lemma
                         )
 
                         if anchor_target_ids is None:
                             continue
+
+                        emitted_triplets.add(
+                            (lemma, anchor, positive, negative)
+                        )
 
                         row = {
                             "lemma": lemma,

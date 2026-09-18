@@ -8,12 +8,14 @@ class UDPipeModel:
         logging.info(f"Loading UDPipe model from '{path}'...")
 
         self.model = ufal.udpipe.Model.load(path)
+        if not self.model:
+            raise FileNotFoundError(
+                f"Cannot load UDPipe model from file '{path}'"
+            )
+
         self.tokenizer = self.model.newTokenizer(self.model.DEFAULT)
         if not self.tokenizer:
             raise Exception("The model does not have a tokenizer")
-
-        if not self.model:
-            raise Exception(f"Cannot load UDPipe model from file '{path}'")
 
         logging.info("Model loaded successfully.")
 

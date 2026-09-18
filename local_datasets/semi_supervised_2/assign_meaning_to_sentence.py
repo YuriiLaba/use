@@ -14,10 +14,10 @@ from sklearn.metrics.pairwise import cosine_similarity
 
 from sentence_transformers import SentenceTransformer
 
-from services.utils_data import read_and_transform_data
+from services.utils_data import read_homonym_benchmark
 from services.config import (
     UNIQUE_LEMMAS_WITH_SENTENCES_FILE,
-    SUM_PATH,
+    HOMONYM_BENCHMARK_PATH,
 )
 
 
@@ -199,6 +199,6 @@ if __name__ == "__main__":
     with open(UNIQUE_LEMMAS_WITH_SENTENCES_FILE, "r") as f:
         data = [json.loads(line) for line in f]
 
-    sum = read_and_transform_data(SUM_PATH, homonym=True)
+    sum = read_homonym_benchmark(HOMONYM_BENCHMARK_PATH)
 
     main()

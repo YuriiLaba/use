@@ -4,6 +4,10 @@ __pycache__/
 # IDEs
 .vscode/
 
+# macOS metadata
+.DS_Store
+**/.DS_Store
+
 # project folders with big files
 data/*
 models/*
@@ -19,7 +23,8 @@ datasets_pre_defined/*
 
 # environments
 venv/
-.env
+.env/
+.venv/
 
 # temporary files
 tmp/
@@ -37,3 +42,6 @@ logs/
 !.gitkeep
 !requirements.txt
 !requirements-notebooks.txt
+
+# paper files
+paper/*

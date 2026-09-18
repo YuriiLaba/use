@@ -12,6 +12,8 @@ class TrainingConfig:
 
     # paths
     path_to_save_fine_tuned_model: str = "models/fine-tuned-models"
+    hf_dataset: str | None = None
+    hf_subset: str | None = None
 
     # training
     train_data_path: str = (

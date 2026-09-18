@@ -3,8 +3,6 @@ import numpy as np
 import torch
 import torch.nn.functional as F
 
-from tqdm import tqdm
-
 from services.utils_embedding_calculation_v2 import (
     get_target_word_embedding,
     get_context_embedding,
@@ -22,6 +20,7 @@ class PredictionStrategy:
         udpipe_model,
         pooling_strategy,
         device,
+        context_embedding_cache=None,
     ):
         # TODO: check whether it's more efficient to create numpy here
         max_sim = -1
@@ -45,8 +44,19 @@ class PredictionStrategy:
             max_sub_sim = -1
 
             for sub_context in context:
-                sub_context_embedding = get_context_embedding(
-                    model, tokenizer, pooling_strategy, sub_context, device
+                cache = context_embedding_cache
+                cache_key = (lemma, sub_context)
+                if cache is not None and cache_key not in cache:
+                    cache[cache_key] = get_context_embedding(
+                        model, tokenizer, pooling_strategy, sub_context, device
+                    )
+
+                sub_context_embedding = (
+                    cache[cache_key]
+                    if cache is not None
+                    else get_context_embedding(
+                        model, tokenizer, pooling_strategy, sub_context, device
+                    )
                 )
                 sub_similarity = F.cosine_similarity(
                     combined_embedding, torch.tensor(sub_context_embedding), dim=0
@@ -71,6 +81,7 @@ class PredictionStrategy:
         udpipe_model,
         pooling_strategy,
         device,
+        context_embedding_cache=None,
     ):
         max_sim = -1
         correct_context = None
@@ -94,8 +105,19 @@ class PredictionStrategy:
             max_sub_sim = -1
 
             for sub_context in context:
-                sub_context_embedding = get_context_embedding(
-                    model, tokenizer, pooling_strategy, sub_context, device
+                cache = context_embedding_cache
+                cache_key = (lemma, sub_context)
+                if cache is not None and cache_key not in cache:
+                    cache[cache_key] = get_context_embedding(
+                        model, tokenizer, pooling_strategy, sub_context, device
+                    )
+
+                sub_context_embedding = (
+                    cache[cache_key]
+                    if cache is not None
+                    else get_context_embedding(
+                        model, tokenizer, pooling_strategy, sub_context, device
+                    )
                 )
                 sub_context_embedding = torch.tensor(sub_context_embedding)
 

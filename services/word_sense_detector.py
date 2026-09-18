@@ -38,6 +38,10 @@ class WordSenseDetector:
         self.evaluation_dataset = evaluation_dataset
         self.prediction_strategy = prediction_strategy
         self.pooling_strategy = pooling_strategy
+        # Cache gloss embeddings for the duration of one evaluation run.
+        # The cache is instance-scoped so embeddings are never reused across
+        # different models or detector instances.
+        self.context_embedding_cache = {}
         # TODO create a WSD_logger and move there missing_target_word_in_sentence
         self.context_lookup = (
             self.evaluation_dataset.groupby("lemma")["gloss"].apply(list).to_dict()
@@ -57,6 +61,7 @@ class WordSenseDetector:
             self.udpipe_model,
             self.pooling_strategy,
             self.device,
+            self.context_embedding_cache,
         )
 
     def run(self):

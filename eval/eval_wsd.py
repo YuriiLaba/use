@@ -1,23 +1,17 @@
-"""
-Run: python3 -m eval.eval_wsd
-"""
-
 import logging
 
 from services.poolings import PoolingStrategy
 from services.udpipe_model import UDPipeModel
 from services.utils_results import results_reports
-from services.utils_data import read_and_transform_data
+from services.utils_data import read_homonym_benchmark
 from services.word_sense_detector import WordSenseDetector
 from services.prediction_strategies import PredictionStrategy
-from services.config import PATH_TO_SOURCE_UDPIPE, SUM_PATH
+from services.config import PATH_TO_SOURCE_UDPIPE, HOMONYM_BENCHMARK_PATH
 from services.utils_results import prediction_accuracy
 
 import torch
 from transformers import AutoTokenizer, AutoModel
 
-MODEL_NAME_OR_PATH = "models/fine-tuned-models/model_xwzpoedx_best"
-MODEL_NAME_OR_PATH = "models/fine-tuned-models/model_sor6k453_final"
 
 DEVICE = "cuda"  # or "cpu"
 
@@ -26,6 +20,18 @@ logging.basicConfig(
     level=logging.INFO,
     handlers=[logging.FileHandler("eval_wsd.log"), logging.StreamHandler()],
 )
+
+# Hugging Face Hub uses httpx/httpcore for model downloads. Their request-level
+# INFO logs are noisy during batch evaluation; keep evaluator logs visible.
+for _logger_name in (
+    "httpx",
+    "httpcore",
+    "huggingface_hub",
+    "transformers",
+    "urllib3",
+):
+    logging.getLogger(_logger_name).setLevel(logging.WARNING)
+
 logger = logging.getLogger(__name__)
 
 
@@ -33,14 +39,14 @@ def evaluate_wsd(
     model_path: str,
     model_tokenizer_path: str | None = None,
     verbose: bool = True,
-    sum_path: str = SUM_PATH,
+    benchmark_path: str = HOMONYM_BENCHMARK_PATH,
     device: str = DEVICE,
 ):
     if model_tokenizer_path is None:
         model_tokenizer_path = model_path
 
     logger.info("Loading evaluation dataset...")
-    data = read_and_transform_data(sum_path, homonym=True)
+    data = read_homonym_benchmark(benchmark_path)
 
     logger.info("Loading fine-tuned model...")
     tokenizer = AutoTokenizer.from_pretrained(
@@ -76,9 +82,9 @@ if __name__ == "__main__":
     import argparse
 
     parser = argparse.ArgumentParser(description="Evaluate dictionary-sense WSD accuracy.")
-    parser.add_argument("--model-path", default=MODEL_NAME_OR_PATH)
+    parser.add_argument("--model-path", default="sentence-transformers/paraphrase-multilingual-mpnet-base-v2 ")
     parser.add_argument("--tokenizer-path", default=None)
-    parser.add_argument("--sum-path", default=SUM_PATH)
+    parser.add_argument("--benchmark-path", default=HOMONYM_BENCHMARK_PATH)
     parser.add_argument("--device", default=DEVICE)
     parser.add_argument(
         "--no-reports",
@@ -90,7 +96,7 @@ if __name__ == "__main__":
         args.model_path,
         args.tokenizer_path,
         verbose=not args.no_reports,
-        sum_path=args.sum_path,
+        benchmark_path=args.benchmark_path,
         device=args.device,
     )
     print(f"WSD accuracy (retained dictionary-sense rows): {accuracy:.6f}")

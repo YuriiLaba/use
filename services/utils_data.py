@@ -1,265 +1,16 @@
-import lzma
 import pandas as pd
+import json
 import pymorphy2
 import os
-import re
 import stanza
 from services.config import (
-    MIN_LEMMA_LENTH,
-    MAX_GLOSS_OCCURRENCE,
     ACUTE,
     GRAVE,
-    LEMMAS_TO_REMOVE,
 )
-from functools import reduce
-import operator
-
 
 def take_first_n_glosses(data, first_n_glosses):
     data = data.groupby("lemma").head(first_n_glosses)
     return data
-
-
-def clean_badly_parsed_data(data):
-    # patterns_to_clear = ["(?i)Те саме[ ,]+[0-9. ,що;–)]+",
-    #                      "(?i)дія за знач[0-9. ,і;–)]+",
-    #                      "(?i)стан за знач[0-9. ,і;–)]+",
-    #                      "(?i)Прикм. до[0-9. ,і;–)]+",
-    #                      "(?i)Зменш. до[0-9. ,і;–)]+",
-    #                      "(?i)Вищ. ст. до[0-9. ,і;–)]+",
-    #                      "(?i)Док. до[0-9. ,і;–)]+",
-    #                      "(?i)Присл. до[0-9. ,і;–)]+",
-    #                      " . . [0-9 ,\)–]+"
-    #                      ]
-    # for pattern in patterns_to_clear:
-    #     data.gloss = data.gloss.apply(lambda x: re.sub(pattern, '', x))
-    # data = data[data['gloss'].apply(len) > 2]
-    # data = data.groupby("lemma").filter(lambda x: len(x) > 1)
-
-    replace_short = {
-        "Вигот.": "Виготовлений",
-        "Власт.": "Властивий",
-        "Признач.": "Призначений",
-        "Зробл.": "Зроблений",
-        "і т. ін.": "",
-    }
-
-    for r in replace_short:
-        data.gloss = data.gloss.str.replace(r, replace_short[r])
-
-    return data
-
-
-def remove_sense_reference(data):
-    patterns_to_clear = [
-        "Абстр. ім.",
-        "Вищ. ст. до",
-        "Док. до",
-        "Дія за знач.",
-        "Дієпр. акт",
-        "Дієпр. пас.",
-        "Жін. до",
-        "Збільш. до",
-        "Зменш. до",
-        "Зменш.-пестл. до",
-        "Однокр. до",
-        "Пас. до",
-        "Пестл. до",
-        "Прикм. до",
-        "Присл. до",
-        "Підсил. до",
-        "Стан за знач.",
-        "Стос. до",
-        "Те саме",
-        "дія за знач",
-        "стан за знач",
-    ]
-
-    def check_if_drop(row):
-        for i in patterns_to_clear:
-            if i in row:
-                return True
-        return False
-
-    lemmas_to_drop = data[data["gloss"].apply(check_if_drop)]["lemma"].values
-    return data[~data["lemma"].isin(lemmas_to_drop)]
-
-
-def homonym_preparation(data):
-    data["lemma"] = data.lemma.apply(
-        lambda x: x.lower().replace(GRAVE, "").replace(ACUTE, "")
-    )
-    data = data.groupby("lemma").filter(lambda x: len(x) > 1)
-    data["order"] = data.groupby("lemma", as_index=False)["lemma"].cumcount()
-    return data
-
-
-def drop_duplicates(data, udpipe_model=None):
-    data.sort_values("lemma", inplace=True)
-    # make copy of glosses to avoid changing original glosses in data
-    # replace "." to "" in glosses to avoid duplicates with different glosses because of "." in them
-    data["gloss_copy"] = data.gloss.apply(
-        lambda x: x.replace(".", "")
-        .replace("-", " ")
-        .replace(ACUTE, "")
-        .replace(GRAVE, "")
-    )
-    # replace all numbers to ""
-    data["gloss_copy"] = data.gloss_copy.apply(lambda x: re.sub(r"\d+", "", x))
-
-    # lemmatize glosses to avoid duplicates with different forms of words in them
-    import spacy
-
-    nlp = spacy.load("uk_core_news_sm", enable=["lemmatizer", "tokenizer", "tagger"])
-    data["gloss_copy"] = data.gloss_copy.apply(
-        lambda x: " ".join(
-            [token.lemma_ for token in nlp(x) if token.pos_ not in ["PUNCT", "SPACE"]]
-        )
-    )
-
-    data.drop_duplicates(subset=["lemma", "gloss_copy"], inplace=True)
-
-    data["str_examples"] = data.examples.astype(str)
-    data.drop_duplicates(subset=["str_examples", "gloss_copy"], inplace=True)
-    data.drop(columns=["str_examples"], inplace=True)
-
-    # drop gloss_copy column
-    # data.drop(columns=["gloss_copy"], inplace=True)
-
-    return data
-
-
-def parse_synset(data):
-    data = data.explode("synsets")
-    data = data[data["synsets"].apply(lambda x: len(x["gloss"])) > 0]
-    data = data[data["synsets"].apply(lambda x: len(x["examples"])) > 0]
-    data = pd.concat(
-        [data.drop(columns=["synsets"]), data.synsets.apply(pd.Series)], axis=1
-    )
-    data.drop(columns=["sense_id"], inplace=True)
-    data["examples"] = data["examples"].apply(lambda x: [i["ex_text"] for i in x])
-    return data
-
-
-def fix_vocabulary_patterns(data):
-    pattern = r" \([^\(]*?знач[^\)]*?\)"
-    data.gloss = data.gloss.apply(lambda x: re.sub(pattern, "", x))
-
-    pattern = r"\s\(див\..*?\)"
-    data.gloss = data.gloss.apply(lambda x: re.sub(pattern, "", x))
-
-    # replace "Збірн." to "Збірний"
-    pattern = r"^Збірн\."
-    data.gloss = data.gloss.apply(lambda x: re.sub(pattern, "Збірне", x))
-
-    # replace ending with space+digit with empty string
-    pattern = r"\s\d+$"
-    data.gloss = data.gloss.apply(lambda x: re.sub(pattern, "", x))
-
-    return data
-
-
-def read_and_transform_data(
-    path, homonym=False, gloss_strategy="first", remove_reference_lemma=True
-):
-    data = pd.read_json(path, lines=True).drop(
-        columns=["suffixes", "tags", "phrases", "word_id", "url", "prime"]
-    )
-    data = data[data.lemma.apply(len) > MIN_LEMMA_LENTH]
-
-    data.dropna(subset=["synsets"], inplace=True)
-    data = data[data.synsets.apply(len) > 0]
-
-    if homonym:
-        data = homonym_preparation(data)
-
-    data = parse_synset(data)
-
-    if gloss_strategy == "first":
-        data["gloss"] = data["gloss"].apply(lambda x: x[0])
-    elif gloss_strategy == "concat":
-        data["gloss"] = data["gloss"].apply(lambda x: ". ".join(x))
-
-    gloss_to_remove = (
-        data.groupby("gloss")
-        .filter(lambda x: len(x) > MAX_GLOSS_OCCURRENCE)["gloss"]
-        .tolist()
-    )
-    data = data[~data["gloss"].isin(gloss_to_remove)]
-
-    data = clean_badly_parsed_data(data)
-
-    if remove_reference_lemma:
-        data = remove_sense_reference(data)
-
-    data = data[~data.lemma.isin(LEMMAS_TO_REMOVE)]
-
-    # data = drop_duplicates(data)
-    data = fix_vocabulary_patterns(data)
-
-    data = drop_duplicates(data)
-
-    if homonym:
-        data = (
-            data.groupby(["lemma", "order"])
-            .agg({"gloss": list, "examples": lambda x: reduce(operator.concat, x)})
-            .reset_index()
-            .drop(columns=["order"])
-        )
-
-    else:
-        data["gloss"] = data.gloss.apply(lambda x: [x])
-
-    data = data.groupby("lemma").filter(lambda x: len(x) > 1)
-    return data
-
-
-def prepare_frequent_dictionary(path, force_rebuild=False, save_errors=False):
-    if os.path.exists("data/frequents.pkl") and not force_rebuild:
-        print("Frequency df already exist, use force_rebuild=True to rebuild it")
-        return
-
-    lines_of_file = []
-    errors_lines = []
-
-    # TODO think how to correct parse dictionary to avoid errors
-    # Try  ensure_ascii=False
-
-    with open(path, "rb") as compressed:
-        with lzma.LZMAFile(compressed) as uncompressed:
-            for line in uncompressed:
-                parsed_line = line.decode("utf8")[:-2].split(",")
-                if len(parsed_line) != 7:
-                    if save_errors:
-                        errors_lines.append(line)
-                    continue
-                lines_of_file.append(parsed_line)
-
-    df = pd.DataFrame(lines_of_file[1:], columns=lines_of_file[0])
-    df.lemma = df.lemma.str.replace("’", "'").str.lower()
-    for numeric_col in [
-        "count",
-        "doc_count",
-        "freq_by_pos",
-        "freq_in_corpus",
-        "doc_frequency",
-    ]:
-        df[numeric_col] = df[numeric_col].astype("float")
-
-    df = df.groupby(["lemma", "pos"]).sum().reset_index()
-
-    if not os.path.exists("data"):
-        os.mkdir("data")
-
-    df.sort_values(["lemma", "freq_in_corpus"], inplace=True)
-    df.to_pickle("data/frequents.pkl")
-
-    if save_errors:
-        df = pd.DataFrame(errors_lines, columns=["column"])
-        df.to_csv("data/errors_of_dict.csv", index=False)
-
-    del df
-
 
 def add_pos_tag(data_with_predictions, udpipe_model=None, engine="stanza"):
     if engine == "stanza":
@@ -305,7 +56,6 @@ def add_pos_tag(data_with_predictions, udpipe_model=None, engine="stanza"):
 
     return data_with_predictions
 
-
 def add_frequency_column(data, udpipe_model):
     dictionary = pd.read_pickle("data/frequents.pkl")
 
@@ -350,3 +100,35 @@ def add_frequency_column(data, udpipe_model):
 
     del dictionary, data_not_merged
     return data
+
+def read_homonym_benchmark(path):
+      rows = []
+      with open(path, encoding="utf-8") as file:
+          for line_number, line in enumerate(file, start=1):
+              if not line.strip():
+                  continue
+
+              row = json.loads(line)
+
+              lemma = str(row["lemma"]).strip().lower()
+              gloss = row["gloss"]
+              examples = row["examples"]
+
+              if isinstance(gloss, str):
+                  gloss = [gloss]
+
+              if isinstance(examples, str):
+                  examples = [examples]
+
+              if not lemma or not gloss or not examples:
+                  continue
+
+              rows.append(
+                  {
+                      "lemma": lemma,
+                      "gloss": gloss,
+                      "examples": examples,
+                  }
+              )
+
+      return pd.DataFrame(rows)

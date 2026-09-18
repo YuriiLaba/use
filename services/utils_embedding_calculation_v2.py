@@ -4,9 +4,6 @@ from services.udpipe_model import UDPipeModel
 
 import spacy
 
-# TODO: load once globally
-spacy_nlp = spacy.load("uk_core_news_sm", enable=["lemmatizer"])
-
 
 def ngrams(s: str, n: int = 3) -> set[str]:
     return {s[i : i + n] for i in range(len(s) - n + 1)}

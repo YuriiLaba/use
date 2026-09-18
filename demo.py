@@ -1,6 +1,6 @@
 from transformers import AutoModel, AutoTokenizer
 from services.poolings import PoolingStrategy
-from services.utils_data import read_and_transform_data
+from services.utils_data import read_homonym_benchmark
 from services.utils_embedding_calculation_v2 import (
     get_target_word_embedding,
     get_context_embedding,
@@ -30,7 +30,7 @@ def load_models(model_name: str, device: str):
 
 def load_dataset(path: str, target_lemma: str):
     print("Reading and processing evaluation dataset...")
-    data = read_and_transform_data(path, homonym=True)
+    data = read_homonym_benchmark(path)
     data = data[data["lemma"] == target_lemma]
     return data
 
@@ -104,7 +104,7 @@ def find_best_meaning(
 
 
 def main():
-    SUM_PATH = "./datasets_pre_defined/sum_final.jsonlines"
+    SUM_PATH = "./datasets_pre_defined/homonym_dictionary_clean.jsonl"
     MODEL_NAME = "victormuryn/mpnet-use-markov-pt"
     TARGET_LEMMA = "коса"
     DEVICE = "cuda:0"
