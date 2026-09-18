@@ -105,7 +105,11 @@ cd ..
 
 ## Collect sentences
 
-The collector is CPU-based. It uses one worker by default because the UDPipe model is large. Use separate output files because collection outputs are appended to existing files.
+The collector is CPU-based. The current implementation starts approximately half of the available CPU count as multiprocessing workers, and each worker may load the large UDPipe model. Use a Linux server with sufficient RAM for full-corpus collection when possible.
+
+Use separate output files because collection outputs are appended to existing files.
+
+The current collector version does not expose a `--workers` option. The previous macOS-safe worker initializer is not present in this checkout, so collection may stall on macOS when using the default `spawn` multiprocessing behavior. Run collection on Linux, or restore the worker-initializer change before running it locally on macOS.
 
 For a smoke test:
 
@@ -114,8 +118,7 @@ python -m collect_sentences.collect_ubertext_sentences \
   --source_dataset datasets_pre_defined/ubertext.news.filter_rus_gcld+short.text_only.txt.bz2 \
   --save_dataset local_datasets/raw_sentences/test.json \
   --num_examples 10 \
-  --save_every 1 \
-  --workers 1
+  --save_every 1
 ```
 
 For the three full corpora:
@@ -124,20 +127,17 @@ For the three full corpora:
 python -m collect_sentences.collect_ubertext_sentences \
   --source_dataset datasets_pre_defined/ubertext.news.filter_rus_gcld+short.text_only.txt.bz2 \
   --save_dataset local_datasets/raw_sentences/lemma_examples_news.json \
-  --num_examples -1 \
-  --workers 1
+  --num_examples -1
 
 python -m collect_sentences.collect_ubertext_sentences \
   --source_dataset datasets_pre_defined/ubertext.fiction.filter_rus_gcld+short.text_only.txt.bz2 \
   --save_dataset local_datasets/raw_sentences/lemma_examples_fiction.json \
-  --num_examples -1 \
-  --workers 1
+  --num_examples -1
 
 python -m collect_sentences.collect_ubertext_sentences \
   --source_dataset datasets_pre_defined/ubertext.wikipedia.filter_rus_gcld+short.text_only.txt.bz2 \
   --save_dataset local_datasets/raw_sentences/lemma_examples_wikipedia.json \
-  --num_examples -1 \
-  --workers 1
+  --num_examples -1
 ```
 
 Merge and deduplicate all JSON collection outputs:
@@ -178,6 +178,37 @@ wsd_model_results.csv
 ```
 
 The batch evaluator runs on CPU by default and continues if an individual model fails.
+
+To use a CUDA GPU on a Linux server, call the Python evaluator directly:
+
+```bash
+python -m eval.eval_all_wsd_models \
+  --benchmark-path datasets_pre_defined/ukrainian_wsd_benchmark.jsonl \
+  --device cuda:0 \
+  --output wsd_model_results_gpu.csv
+```
+
+The root `eval_all_wsd_models.sh` launcher intentionally uses CPU by default for macOS.
+
+## Remote Linux workflow
+
+The repository can be copied to the configured GPU server with:
+
+```bash
+ssh ucu-lab-2240 "mkdir -p /mnt/data/laba/use/datasets_pre_defined"
+
+scp datasets_pre_defined/ukrainian_wsd_benchmark.jsonl \
+  ucu-lab-2240:/mnt/data/laba/use/datasets_pre_defined/
+```
+
+Connect and run from the remote checkout:
+
+```bash
+ssh ucu-lab-2240
+cd /mnt/data/laba/use
+source .venv/bin/activate
+python -m eval.eval_all_wsd_models --device cuda:0
+```
 
 ## Training pipeline
 
