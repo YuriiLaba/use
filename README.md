@@ -34,8 +34,9 @@ python -m pip install ./models/ufal.udpipe-1.2.0.1.tar.gz
 Verify the environment:
 
 ```bash
-python scripts/reproduce/environment_report.py
-python -m compileall -q .
+find . -path './.venv' -prune -o -path './.git' -prune -o -name '*.py' -print0 \
+  | xargs -0 python -m py_compile
+python -c "import torch, transformers, sentence_transformers, pandas, ufal.udpipe; print('Core dependencies OK')"
 ```
 
 ## Required assets
@@ -60,28 +61,6 @@ It contains one sense record per JSONL line with:
 
 ```text
 lemma, gloss, examples
-```
-
-## Build the lemma list
-
-If the benchmark is the source of truth for target lemmas, generate the collector input file:
-
-```bash
-python - <<'PY'
-import pandas as pd
-
-df = pd.read_json(
-    "datasets_pre_defined/ukrainian_wsd_benchmark.jsonl",
-    lines=True,
-    encoding="utf-8",
-)
-
-df["lemma"].dropna().drop_duplicates().sort_values().to_csv(
-    "datasets_pre_defined/unique_lemmas_homonyms.txt",
-    index=False,
-    header=False,
-)
-PY
 ```
 
 ## Download UberText corpora
@@ -189,72 +168,6 @@ python -m eval.eval_all_wsd_models \
 ```
 
 The root `eval_all_wsd_models.sh` launcher intentionally uses CPU by default for macOS.
-
-## Remote Linux workflow
-
-The repository can be copied to the configured GPU server with:
-
-```bash
-ssh ucu-lab-2240 "mkdir -p /mnt/data/laba/use/datasets_pre_defined"
-
-scp datasets_pre_defined/ukrainian_wsd_benchmark.jsonl \
-  ucu-lab-2240:/mnt/data/laba/use/datasets_pre_defined/
-```
-
-Connect and run from the remote checkout:
-
-```bash
-ssh ucu-lab-2240
-cd /mnt/data/laba/use
-source .venv/bin/activate
-python -m eval.eval_all_wsd_models --device cuda:0
-```
-
-## Training pipeline
-
-The full data pipeline is:
-
-```text
-UberText corpora
-  → sentence collection
-  → deduplication
-  → meaning assignment
-  → optional synthetic examples
-  → augmentation
-  → triplet generation
-  → transformer fine-tuning
-  → WSD evaluation
-```
-
-Assign collected sentences to dictionary meanings:
-
-```bash
-python -m local_datasets.semi_supervised_2.assign_meaning_to_sentence
-```
-
-Generate triplets after creating the required augmentation files:
-
-```bash
-python -m local_datasets.semi_supervised_2.form_triplets
-```
-
-Run a small local training smoke test:
-
-```bash
-python -m services.trainer.trainer \
-  --config services/trainer/reviewer_config.ini \
-  --train-data local_datasets/semi_supervised_2/triplets_semi_supervised_all_augs_mixed_100.csv \
-  --pool-targets false \
-  --device cpu \
-  --batch-size 8 \
-  --run-name onboarding-smoke-test
-```
-
-Models are saved under:
-
-```text
-models/fine-tuned-models/
-```
 
 ## Notes
 
