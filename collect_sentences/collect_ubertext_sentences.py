@@ -114,7 +114,7 @@ class CollectUberTextSentences:
 
         print(
             f"\n[✓] Appending batch of {self.sentences_in_current_batch:,} sentences to disk..."
-            "Total collected so far: {self.total_collected_count:,}"
+            f"Total collected so far: {self.total_collected_count:,}"
         )
 
         with open(self.path_to_save_gathered_dataset, "a", encoding="utf-8") as f:
