@@ -51,6 +51,35 @@ datasets_pre_defined/unique_lemmas_homonyms.txt
 
 The UDPipe Python package and the trained UDPipe model are separate assets. The package provides the API; the `.udpipe` file provides the Ukrainian tokenizer and tagger model.
 
+## Install translation augmentation models
+
+The translation and combined augmentation scripts use CTranslate2 models. These models are not downloaded automatically when the augmentation scripts start. Convert them once after installing the project dependencies.
+
+Run from the repository root:
+
+```bash
+mkdir -p models/translators
+
+./.venv/bin/ct2-transformers-converter \
+  --model Helsinki-NLP/opus-mt-tc-big-zle-en \
+  --output_dir models/translators/opus-mt-zle-en-ct2 \
+  --quantization float16
+
+./.venv/bin/ct2-transformers-converter \
+  --model Helsinki-NLP/opus-mt-tc-big-en-zle \
+  --output_dir models/translators/opus-mt-en-zle-ct2 \
+  --quantization float16
+```
+
+The converter downloads the original Hugging Face checkpoints and saves the converted models locally at:
+
+```text
+models/translators/opus-mt-zle-en-ct2
+models/translators/opus-mt-en-zle-ct2
+```
+
+These models are required for back-translation and combined augmentation. They are not required for evaluation, sentence collection, dropout, or token-shuffling augmentation.
+
 The active benchmark is:
 
 ```text

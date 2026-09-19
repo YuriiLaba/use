@@ -20,6 +20,7 @@ class Masker(Augmenter):
         rate=0.15,
         seed=42,
         batch_size=32,
+        device_index=0,
     ):
         self.rate = rate
         self.batch_size = batch_size
@@ -28,7 +29,7 @@ class Masker(Augmenter):
             model=model_name_or_path,
             trust_remote_code=True,
             torch_dtype=torch.float16,
-            device="cuda" if torch.cuda.is_available() else "cpu",
+            device=device_index if torch.cuda.is_available() else -1,
         )
         self.mask_token = self.unmasker.tokenizer.mask_token
         self.udpipe_model = UDPipeModel(udpipe) if isinstance(udpipe, str) else udpipe

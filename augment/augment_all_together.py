@@ -4,6 +4,7 @@ Run: python3 -m augment.augment_all_together
 
 import json
 import logging
+import os
 
 from tqdm import tqdm
 from torch.utils.data import DataLoader
@@ -32,6 +33,7 @@ NUM_WORKERS = 2
 NUM_AUGMENTATIONS = 9
 MARKOV_P = 0.75
 SEED = 42
+GPU_ID = int(os.getenv("AUGMENT_GPU_ID", "0"))
 
 logging.basicConfig(
     level=logging.INFO,
@@ -57,19 +59,20 @@ def main():
         udpipe_model,
         seed=SEED,
         batch_size=1024,
+        device_index=GPU_ID,
     )
     pivot1 = HelsinkiCTranslateTranslator(
         "models/translators/opus-mt-zle-en-ct2",
         "Helsinki-NLP/opus-mt-tc-big-zle-en",
         device="cuda",
-        device_index=[0],
+        device_index=[GPU_ID],
     )
 
     pivot2 = HelsinkiCTranslateTranslator(
         "models/translators/opus-mt-en-zle-ct2",
         "Helsinki-NLP/opus-mt-tc-big-en-zle",
         device="cuda",
-        device_index=[0],
+        device_index=[GPU_ID],
     )
 
     translator = BackTranslator(

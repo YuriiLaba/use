@@ -35,6 +35,7 @@ BATCH_SIZE = 256
 NUM_WORKERS = 2
 NUM_AUGMENTATIONS = 4
 SEED = 42
+GPU_ID = int(os.getenv("AUGMENT_GPU_ID", "0"))
 
 # generating BATCH_SIZE x NUM_AUGMENTATIONS augmented per batch
 
@@ -52,14 +53,14 @@ def main():
         "models/translators/opus-mt-zle-en-ct2",
         "Helsinki-NLP/opus-mt-tc-big-zle-en",
         device="cuda",
-        device_index=[0],
+        device_index=[GPU_ID],
     )
 
     pivot2 = HelsinkiCTranslateTranslator(
         "models/translators/opus-mt-en-zle-ct2",
         "Helsinki-NLP/opus-mt-tc-big-en-zle",
         device="cuda",
-        device_index=[0],
+        device_index=[GPU_ID],
     )
 
     translator = BackTranslator(

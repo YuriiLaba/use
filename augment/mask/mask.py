@@ -3,6 +3,7 @@ Run: python3 -m augment.mask.mask
 """
 
 import logging
+import os
 
 from tqdm import tqdm
 from torch.utils.data import DataLoader
@@ -22,6 +23,7 @@ BATCH_SIZE = 256
 NUM_WORKERS = 2
 NUM_AUGMENTATIONS = 4
 SEED = 42
+GPU_ID = int(os.getenv("AUGMENT_GPU_ID", "0"))
 
 logging.basicConfig(
     level=logging.INFO,
@@ -47,6 +49,7 @@ def main():
         rate=0.15,
         seed=SEED,
         batch_size=128,
+        device_index=GPU_ID,
     )
 
     try:
