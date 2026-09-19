@@ -3,7 +3,6 @@ Run: python3 -m augment.augment_all_together
 """
 
 import json
-import random
 import logging
 
 from tqdm import tqdm
@@ -12,7 +11,7 @@ from torch.utils.data import DataLoader
 from services.udpipe_model import UDPipeModel
 from services.config import PATH_TO_SOURCE_UDPIPE
 
-from augment.common import TextDataset, ThreadedWriter
+from augment.common import TextDataset, ThreadedWriter, set_random_seed
 from augment.dropout.dropouter import Dropouter
 from augment.token_shuffling.token_shuffler import TokenShuffler
 from augment.mask.masker import Masker
@@ -32,6 +31,7 @@ BATCH_SIZE = 128
 NUM_WORKERS = 2
 NUM_AUGMENTATIONS = 9
 MARKOV_P = 0.75
+SEED = 42
 
 logging.basicConfig(
     level=logging.INFO,
@@ -39,10 +39,8 @@ logging.basicConfig(
     force=True,
 )
 
-random.seed(42)
-
-
 def main():
+    set_random_seed(SEED)
     texts_dataset = TextDataset(INPUT_TEXTS_PATH)
     dataloader = DataLoader(
         texts_dataset, batch_size=BATCH_SIZE, shuffle=False, num_workers=NUM_WORKERS
@@ -54,7 +52,12 @@ def main():
     udpipe_model = UDPipeModel(PATH_TO_SOURCE_UDPIPE)
     shuffler = Dropouter(udpipe_model)
     token_shuffler = TokenShuffler(udpipe_model)
-    masker = Masker("Goader/modern-liberta-large", udpipe_model, batch_size=1024)
+    masker = Masker(
+        "Goader/modern-liberta-large",
+        udpipe_model,
+        seed=SEED,
+        batch_size=1024,
+    )
     pivot1 = HelsinkiCTranslateTranslator(
         "models/translators/opus-mt-zle-en-ct2",
         "Helsinki-NLP/opus-mt-tc-big-zle-en",
@@ -96,7 +99,9 @@ def main():
                 )
                 augmented_texts = []
 
-                # reset final_augmented_texts for the next augmenter
+                # Keep only descendants produced by the current/final stage.
+                # Accumulate all branches that map back to the same original
+                # sentence instead of replacing earlier branches.
                 final_augmented_texts = {}
                 for original, augmented_list in new_augmented_texts.items():
                     augmented_list = list(
@@ -105,7 +110,9 @@ def main():
                     augmented_texts.extend(augmented_list)
 
                     original = map_to_original[original]
-                    final_augmented_texts[original] = augmented_list
+                    final_augmented_texts.setdefault(original, []).extend(
+                        augmented_list
+                    )
 
                     map_to_original.update({aug: original for aug in augmented_list})
 

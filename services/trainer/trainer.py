@@ -17,6 +17,7 @@ from torch.amp import GradScaler, autocast
 from sentence_transformers import SentenceTransformer, models
 from transformers import AutoTokenizer, AutoModel
 from transformers.optimization import get_linear_schedule_with_warmup
+from sklearn.model_selection import GroupShuffleSplit
 
 import wandb
 from tqdm.auto import tqdm
@@ -218,14 +219,41 @@ class Trainer:
                 token=hf_token,
                 split="train",
             )
-            df = ds.to_pandas().sample(frac=1, random_state=42)
+            df = ds.to_pandas()
         else:
-            df = pd.read_csv(self.config.train_data_path).sample(frac=1, random_state=42)
+            df = pd.read_csv(self.config.train_data_path)
 
-        # Simple 99/1 split as per your original code
-        split_idx = int(len(df) * 0.99)
-        train_df = df.iloc[:split_idx]
-        eval_df = df.iloc[split_idx:]
+        if "group_id" not in df.columns:
+            raise ValueError(
+                "Training data must contain 'group_id' for leakage-safe splitting. "
+                "Regenerate the triplet CSV with the updated form_triplets.py."
+            )
+
+        if df["group_id"].isna().any():
+            raise ValueError("Training data contains missing group_id values.")
+
+        if df["group_id"].nunique() < 2:
+            raise ValueError("At least two groups are required for train/eval splitting.")
+
+        splitter = GroupShuffleSplit(
+            n_splits=1,
+            test_size=self.config.validation_split,
+            random_state=self.config.split_seed,
+        )
+        train_indices, eval_indices = next(
+            splitter.split(df, groups=df["group_id"])
+        )
+        train_df = df.iloc[train_indices]
+        eval_df = df.iloc[eval_indices]
+
+        train_groups = set(train_df["group_id"])
+        eval_groups = set(eval_df["group_id"])
+        overlap = train_groups & eval_groups
+        if overlap:
+            raise RuntimeError(
+                f"Group leakage detected: {len(overlap)} groups occur in both "
+                "training and validation data."
+            )
 
         # 2. Get loaders from Factory
         # This keeps the Trainer class clean of dataset-specific logic
@@ -478,7 +506,22 @@ if __name__ == "__main__":
         default=None,
         help="Override batch_size from config.",
     )
+    parser.add_argument(
+        "--validation-split",
+        type=float,
+        default=None,
+        help="Fraction of groups reserved for validation.",
+    )
+    parser.add_argument(
+        "--split-seed",
+        type=int,
+        default=None,
+        help="Fixed seed used only for the group-based train/eval split.",
+    )
     args = parser.parse_args()
+
+    if args.validation_split is not None and not 0 < args.validation_split < 1:
+        parser.error("--validation-split must be between 0 and 1")
 
     torch.manual_seed(args.seed)
     random.seed(args.seed)
@@ -497,6 +540,10 @@ if __name__ == "__main__":
         config.hf_subset = args.hf_subset
     if args.batch_size is not None:
         config.batch_size = args.batch_size
+    if args.validation_split is not None:
+        config.validation_split = args.validation_split
+    if args.split_seed is not None:
+        config.split_seed = args.split_seed
 
     model_trainer = Trainer(config, device=args.device)
     model_trainer.train()

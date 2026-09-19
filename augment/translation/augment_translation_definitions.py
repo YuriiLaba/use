@@ -5,7 +5,7 @@ Run: python3 -m augment.translation.augment_translation_definitions
 from tqdm import tqdm
 from torch.utils.data import Dataset, DataLoader
 
-from augment.common import TextDataset, ThreadedWriter
+from augment.common import TextDataset, ThreadedWriter, set_random_seed
 
 from augment.translation.back_translator import (
     BackTranslator,
@@ -22,10 +22,12 @@ OUTPUT_TEXTS_PATH = (
 BATCH_SIZE = 256
 NUM_WORKERS = 2
 NUM_AUGMENTATIONS = 4
+SEED = 42
 
 # generating BATCH_SIZE x NUM_AUGMENTATIONS augmented per batch
 
 def main():
+    set_random_seed(SEED)
     pivot1 = HelsinkiCTranslateTranslator(
         "models/translators/opus-mt-zle-en-ct2",
         "Helsinki-NLP/opus-mt-tc-big-zle-en",

@@ -28,6 +28,8 @@ class TrainingConfig:
     tokenizer_name: str = "sentence-transformers/paraphrase-multilingual-mpnet-base-v2"
     batch_size: int = 104
     num_batch_to_eval: int = 200
+    validation_split: float = 0.01
+    split_seed: int = 42
 
     # TRAINING_PARAMS
     layers_to_unfreeze: int = 0

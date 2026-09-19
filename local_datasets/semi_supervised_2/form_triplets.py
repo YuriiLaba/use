@@ -3,6 +3,7 @@ Run: python3 -m local_datasets.semi_supervised_2.form_triplets
 """
 
 import csv
+import hashlib
 import json
 import logging
 import random
@@ -54,6 +55,7 @@ USE_DEFINITIONS_AUGMENTED = True
 
 SCHEMA = [
     "lemma",
+    "group_id",
     "anchor",
     "positive",
     "negative",
@@ -61,6 +63,12 @@ SCHEMA = [
     "anchor_target_word_ids",
     "meaning_idx",
 ]
+
+
+def make_group_id(sentence: str) -> str:
+    """Return a stable ID shared by an original sentence and its augmentations."""
+    normalized_sentence = " ".join(sentence.split()).casefold()
+    return hashlib.sha256(normalized_sentence.encode("utf-8")).hexdigest()
 
 
 def get_recommended_number_of_sentences(
@@ -133,7 +141,9 @@ def main():
                 )
 
                 for index, sentence in enumerate(sentences):
-                    anchors = set([sentence["sentence"]])
+                    original_sentence = sentence["sentence"]
+                    group_id = make_group_id(original_sentence)
+                    anchors = {original_sentence}
                     probability = sentence.get("probability")  # currently unused
 
                     recommended_sentences_with_anchor = (
@@ -189,6 +199,7 @@ def main():
 
                         row = {
                             "lemma": lemma,
+                            "group_id": group_id,
                             "anchor": anchor,
                             "positive": positive,
                             "negative": negative,

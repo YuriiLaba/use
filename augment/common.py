@@ -4,6 +4,8 @@ import queue
 import random
 import threading
 
+import numpy as np
+import torch
 from torch.utils.data import Dataset
 
 from services.udpipe_model import UDPipeModel
@@ -11,6 +13,15 @@ from services.utils_embedding_calculation_v2 import _find_target_word_in_sentenc
 from services.config import PATH_TO_SOURCE_UDPIPE
 
 from abc import ABC, abstractmethod
+
+
+def set_random_seed(seed: int) -> None:
+    """Seed the random number generators used by augmentation code."""
+    random.seed(seed)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+    if torch.cuda.is_available():
+        torch.cuda.manual_seed_all(seed)
 
 
 class Augmenter(ABC):

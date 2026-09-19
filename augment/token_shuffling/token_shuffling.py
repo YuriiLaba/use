@@ -10,7 +10,7 @@ from torch.utils.data import DataLoader
 from services.udpipe_model import UDPipeModel
 from services.config import PATH_TO_SOURCE_UDPIPE
 
-from augment.common import TextDataset, ThreadedWriter
+from augment.common import TextDataset, ThreadedWriter, set_random_seed
 from augment.token_shuffling.token_shuffler import TokenShuffler
 
 INPUT_TEXTS_PATH = (
@@ -21,6 +21,7 @@ OUTPUT_TEXTS_PATH = "local_datasets/augmented/token_shuffling/augmented_sentence
 BATCH_SIZE = 256
 NUM_WORKERS = 2
 NUM_AUGMENTATIONS = 4
+SEED = 42
 
 logging.basicConfig(
     level=logging.INFO,
@@ -30,6 +31,7 @@ logging.basicConfig(
 
 
 def main():
+    set_random_seed(SEED)
     texts_dataset = TextDataset(INPUT_TEXTS_PATH)
     dataloader = DataLoader(
         texts_dataset, batch_size=BATCH_SIZE, shuffle=False, num_workers=NUM_WORKERS

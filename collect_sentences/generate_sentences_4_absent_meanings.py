@@ -1,114 +1,209 @@
-"""
-Generate synthetic sentences for meanings that lack sufficient examples using LLM.
-The generated sentences are saved in a JSONL file for further processing.
-"""
+"""Generate missing Ukrainian WSD examples with the official OpenAI API."""
 
+import argparse
 import json
-from collections import defaultdict
+import os
+import re
+from typing import Any
 
-from tqdm import tqdm
 from openai import OpenAI
+from tqdm import tqdm
 
 
-## Configuration
-INPUT_FILE = "local_datasets/semi_supervised_2/lemmas_with_meanings_and_sentences_mpnet_filtered.json"
-OUTPUT_FILE = "local_datasets/semi_supervised_2/generated_sentences.jsonl"
+DEFAULT_INPUT_FILE = (
+    "local_datasets/semi_supervised_2/"
+    "lemmas_with_meanings_and_sentences_mpnet_filtered.json"
+)
+DEFAULT_OUTPUT_FILE = (
+    "local_datasets/semi_supervised_2/generated_sentences.jsonl"
+)
+DEFAULT_MIN_SENTENCES = 5
+DEFAULT_MODEL = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
+DEFAULT_SEED = 42
 
-MIN_SENTENCES = 5
-BASE_URL = "http://localhost:8000/v1"
-API_KEY = "EMPTY"
-MODEL_NAME = "Qwen/Qwen3-VL-8B-Instruct"
 
+GENERATE_PROMPT = """Ти експерт з української мови, зокрема з лексикографії.
 
-## Prompt template
-GENERATE_PROMPT = """Ти експерт з української мови, зокрема з лексикографії. Твоє завдання - допомогти створити приклади речень для значень слів, які наразі не мають достатньої кількості прикладів.
+Створи {to_generate} нових, природних і граматично правильних українських
+речень для слова «{lemma}», використовуючи значення нижче:
+{glosses}
 
-Мені потрібна допомога зі словом "{lemma}". 
-Це слово має таке значення:
-{glosses} 
+Не повторюй уже наявні приклади:
+{existing_sentences}
 
-Твоя задача - згенерувати додаткові приклади речень, які ілюструють це значення. Будь ласка, створи {to_generate} нових речень, які є унікальними та природними для української мови. Уникай повторення будь-яких існуючих прикладів. 
-Будь ласка, надай лише згенеровані речення у вигляді маркованого списку, без додаткових пояснень чи тексту.
-Приклад списку:
-- Речення 1
-- Речення 2
-- Речення 3
+Кожне речення повинно ілюструвати саме це значення слова.
+Поверни лише маркований список речень, без пояснень.
+Наприклад:
+- Перше речення.
+- Друге речення.
 
-Згенеровані речення:
+Нові речення:
 """
 
 
-def main():
-    client = OpenAI(base_url=BASE_URL, api_key=API_KEY)
-    out_data = defaultdict(dict)
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(
+        description="Generate missing Ukrainian WSD examples with OpenAI."
+    )
+    parser.add_argument("--input-file", default=DEFAULT_INPUT_FILE)
+    parser.add_argument("--output-file", default=DEFAULT_OUTPUT_FILE)
+    parser.add_argument("--model", default=DEFAULT_MODEL)
+    parser.add_argument(
+        "--min-sentences",
+        type=int,
+        default=DEFAULT_MIN_SENTENCES,
+        help="Generate examples until every meaning has this many sentences.",
+    )
+    parser.add_argument("--seed", type=int, default=DEFAULT_SEED)
+    return parser.parse_args()
 
-    ## Load current data
-    with open(INPUT_FILE, "r") as f:
-        data = json.load(f)
 
-    # count how many meanings need generation
-    n_meanings_to_generate = 0
-    for lemma, meanings in data.items():
-        for meaning_entry in meanings.values():
-            sentences = meaning_entry.get("sentences", [])
+def sentence_text(item: Any) -> str:
+    """Extract sentence text from either the current dict format or a string."""
+    if isinstance(item, dict):
+        return str(item.get("sentence", "")).strip()
+    return str(item).strip()
 
-            if len(sentences) < MIN_SENTENCES:
-                n_meanings_to_generate += 1
 
-    ## Generate sentences
-    pbar = tqdm(total=n_meanings_to_generate, desc="Generating sentences")
-    with open(OUTPUT_FILE, "a") as out_f:
-        for lemma, meanings in data.items():
-            for meaning_entry in meanings.values():
-                meaning = meaning_entry.get("meaning", {})
-                sentences = meaning_entry.get("sentences", [])
+def parse_generated_sentences(output: str, limit: int) -> list[str]:
+    """Parse bullet/numbered lines and return unique non-empty sentences."""
+    sentences = []
+    seen = set()
 
-                to_generate = max(0, MIN_SENTENCES - len(sentences))
-                if to_generate <= 0:  # nothing to generate
-                    continue
+    for raw_line in output.splitlines():
+        line = raw_line.strip()
+        if not line:
+            continue
 
-                # format glosses and existing sentences to include in the prompt
-                glosses_list = meaning.get("gloss", [])
-                glosses = "\n".join([f"- {g}" for g in glosses_list])
+        # Accept -, *, •, and numbered lists such as "1." or "2)".
+        sentence = re.sub(r"^(?:[-*•]|\d+[.)])\s*", "", line).strip()
+        if sentence == line or not sentence:
+            continue
 
-                examples = meaning.get("examples", [])
-                existing_sentences = "\n".join(f"- {s}" for s in examples)
+        normalized = " ".join(sentence.split()).casefold()
+        if normalized not in seen:
+            seen.add(normalized)
+            sentences.append(sentence)
 
-                prompt = GENERATE_PROMPT.format(
-                    lemma=lemma,
-                    glosses=glosses,
-                    existing_sentences=existing_sentences,
-                    to_generate=to_generate,
-                )
-                print(f"Lemma: {lemma}, Glosses: {glosses_list}")
+        if len(sentences) >= limit:
+            break
 
-                ## Generate via API
-                messages = [{"role": "user", "content": prompt}]
-                response = client.chat.completions.create(
-                    model=MODEL_NAME,
-                    messages=messages,
-                )
+    return sentences
 
-                output_text = response.choices[0].message.content
-                print(output_text)
 
-                # parse output sentences
-                output_text = output_text.strip().split("\n")
-                new_sentences = [
-                    sent.strip("- ").strip()
-                    for sent in output_text
-                    if sent.startswith("-")
-                ]
+def generate_sentences(
+    client: OpenAI,
+    model: str,
+    lemma: str,
+    meaning_entry: dict[str, Any],
+    to_generate: int,
+    seed: int,
+) -> list[str]:
+    meaning = meaning_entry.get("meaning", {})
+    glosses_list = [str(gloss).strip() for gloss in meaning.get("gloss", [])]
+    glosses_list = [gloss for gloss in glosses_list if gloss]
 
-                out_data[lemma][glosses_list[0]] = {
-                    "meaning": meaning,
-                    "sentences": new_sentences,
-                }
+    if not glosses_list:
+        return []
 
-                pbar.update(1)
+    existing_sentences = [
+        sentence_text(item) for item in meaning_entry.get("sentences", [])
+    ]
+    existing_sentences = [sentence for sentence in existing_sentences if sentence]
 
-            # save every lemma
-            out_f.write(json.dumps({lemma: out_data[lemma]}, ensure_ascii=False) + "\n")
+    glosses = "\n".join(f"- {gloss}" for gloss in glosses_list)
+    existing = "\n".join(f"- {sentence}" for sentence in existing_sentences)
+    if not existing:
+        existing = "- Немає наявних прикладів."
+
+    prompt = GENERATE_PROMPT.format(
+        lemma=lemma,
+        glosses=glosses,
+        existing_sentences=existing,
+        to_generate=to_generate,
+    )
+
+    response = client.chat.completions.create(
+        model=model,
+        messages=[{"role": "user", "content": prompt}],
+        seed=seed,
+    )
+    output = response.choices[0].message.content or ""
+    return parse_generated_sentences(output, to_generate)
+
+
+def main() -> None:
+    args = parse_args()
+
+    if not os.getenv("OPENAI_API_KEY"):
+        raise RuntimeError(
+            "OPENAI_API_KEY is not set. Export it before running this script."
+        )
+
+    client = OpenAI()
+
+    with open(args.input_file, "r", encoding="utf-8") as input_file:
+        data = json.load(input_file)
+
+    meanings_to_generate = sum(
+        1
+        for meanings in data.values()
+        for meaning_entry in meanings.values()
+        if len(meaning_entry.get("sentences", [])) < args.min_sentences
+    )
+
+    print(f"Using OpenAI model: {args.model}")
+    print(f"Meanings requiring generation: {meanings_to_generate}")
+    print(f"Writing output to: {args.output_file}")
+
+    # Write a fresh file so rerunning does not append duplicate records.
+    with open(args.output_file, "w", encoding="utf-8") as output_file:
+        with tqdm(total=meanings_to_generate, desc="Generating sentences") as pbar:
+            for lemma, meanings in data.items():
+                generated_for_lemma = {}
+
+                for meaning_id, meaning_entry in meanings.items():
+                    current_count = len(meaning_entry.get("sentences", []))
+                    to_generate = max(0, args.min_sentences - current_count)
+                    if to_generate == 0:
+                        continue
+
+                    glosses = meaning_entry.get("meaning", {}).get("gloss", [])
+                    if not glosses:
+                        print(f"Skipping {lemma}/{meaning_id}: no gloss found")
+                        pbar.update(1)
+                        continue
+
+                    print(
+                        f"Generating {to_generate} sentence(s) for "
+                        f"lemma={lemma!r}, meaning={meaning_id!r}"
+                    )
+
+                    new_sentences = generate_sentences(
+                        client=client,
+                        model=args.model,
+                        lemma=lemma,
+                        meaning_entry=meaning_entry,
+                        to_generate=to_generate,
+                        seed=args.seed,
+                    )
+
+                    generated_for_lemma[meaning_id] = {
+                        "meaning": meaning_entry["meaning"],
+                        "sentences": new_sentences,
+                    }
+                    print(f"Generated: {new_sentences}")
+                    pbar.update(1)
+
+                if generated_for_lemma:
+                    output_file.write(
+                        json.dumps(
+                            {lemma: generated_for_lemma},
+                            ensure_ascii=False,
+                        )
+                        + "\n"
+                    )
+                    output_file.flush()
 
 
 if __name__ == "__main__":

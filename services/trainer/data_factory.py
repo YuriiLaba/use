@@ -83,7 +83,7 @@ class DataFactory:
         eval_loader = torch.utils.data.DataLoader(
             eval_ds,
             batch_size=config.batch_size,
-            shuffle=True,
+            shuffle=False,
             num_workers=DataFactory.NUM_WORKERS,
             pin_memory=True,
             persistent_workers=True,

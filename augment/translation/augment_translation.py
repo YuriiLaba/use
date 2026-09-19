@@ -16,7 +16,7 @@ from augment.translation.back_translator import (
     # NLLB200TransformersTranslator,
 )
 
-from augment.common import TextDataset, ThreadedWriter
+from augment.common import TextDataset, ThreadedWriter, set_random_seed
 
 
 logging.basicConfig(
@@ -34,11 +34,13 @@ OUTPUT_TEXTS_PATH = "local_datasets/augmented/translation/augmented_sentences_tr
 BATCH_SIZE = 256
 NUM_WORKERS = 2
 NUM_AUGMENTATIONS = 4
+SEED = 42
 
 # generating BATCH_SIZE x NUM_AUGMENTATIONS augmented per batch
 
 
 def main():
+    set_random_seed(SEED)
     # pivot = NLLB200CTranslateTranslator(
     #     "models/translators/nllb-200-3.3B",
     #     ["uk", "en"],

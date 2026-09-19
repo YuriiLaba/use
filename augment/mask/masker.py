@@ -9,7 +9,7 @@ import torch
 from transformers import pipeline
 
 from services.udpipe_model import UDPipeModel
-from augment.common import Augmenter
+from augment.common import Augmenter, set_random_seed
 
 
 class Masker(Augmenter):
@@ -33,7 +33,7 @@ class Masker(Augmenter):
         self.mask_token = self.unmasker.tokenizer.mask_token
         self.udpipe_model = UDPipeModel(udpipe) if isinstance(udpipe, str) else udpipe
 
-        random.seed(seed)
+        set_random_seed(seed)
 
     def _unsmask_sentences(self, sentences: list[str]):
         processing_queue = sentences.copy()
