@@ -2,7 +2,6 @@
 
 import argparse
 import json
-from collections import Counter
 
 
 DEFAULT_INPUT_FILE = (
@@ -18,47 +17,21 @@ def analyze(input_file: str, min_sentences: int) -> None:
 
     total_definitions = 0
     definitions_under_threshold = 0
-    definitions_with_zero_sentences = 0
-    sentence_counts = Counter()
-    definitions_needing_sentences = []
 
     for lemma, meanings in data.items():
         for meaning, meaning_data in meanings.items():
             total_definitions += 1
             sentence_count = len(meaning_data.get("sentences", []))
-            sentence_counts[sentence_count] += 1
 
             if sentence_count < min_sentences:
                 definitions_under_threshold += 1
-                definitions_needing_sentences.append(
-                    (lemma, meaning, sentence_count)
-                )
 
-            if sentence_count == 0:
-                definitions_with_zero_sentences += 1
-
-    print(f"Input file: {input_file}")
-    print(f"Minimum required sentences: {min_sentences}")
-    print(f"Total definitions: {total_definitions:,}")
-    print(
-        f"Definitions with fewer than {min_sentences} sentences: "
-        f"{definitions_under_threshold:,}"
+    percentage = (
+        definitions_under_threshold / total_definitions * 100
+        if total_definitions
+        else 0.0
     )
-    print(
-        f"Definitions with zero sentences: "
-        f"{definitions_with_zero_sentences:,}"
-    )
-
-    print("\nSentence-count distribution:")
-    for count, number in sorted(sentence_counts.items()):
-        print(f"{count} sentences: {number:,} definitions")
-
-    print(
-        f"\nDefinitions requiring generation "
-        f"(showing the first 20 of {len(definitions_needing_sentences):,}):"
-    )
-    for lemma, meaning, count in definitions_needing_sentences[:20]:
-        print(f"{lemma} | {meaning} | {count} sentences")
+    print(f"{percentage:.2f}%")
 
 
 def parse_args(args=None):
