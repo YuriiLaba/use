@@ -5,6 +5,29 @@ set -u
 PYTHON="./.venv/bin/python"
 BENCHMARK="datasets_pre_defined/ukrainian_wsd_benchmark.jsonl"
 OUTPUT="wsd_model_results.csv"
+DEVICE="cpu"
+EXTRA_ARGS=()
+
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --device)
+            if [[ $# -lt 2 ]]; then
+                echo "Missing value for --device" >&2
+                exit 2
+            fi
+            DEVICE="$2"
+            shift 2
+            ;;
+        --device=*)
+            DEVICE="${1#*=}"
+            shift
+            ;;
+        *)
+            EXTRA_ARGS+=("$1")
+            shift
+            ;;
+    esac
+done
 
 if [[ ! -x "$PYTHON" ]]; then
     echo "Virtual-environment Python not found: $PYTHON" >&2
@@ -19,10 +42,10 @@ fi
 
 echo "Starting WSD evaluation: $(date)"
 echo "Benchmark: $BENCHMARK"
-echo "Device: cpu"
+echo "Device: $DEVICE"
 
 exec "$PYTHON" -m eval.eval_all_wsd_models \
     --benchmark-path "$BENCHMARK" \
-    --device cpu \
+    --device "$DEVICE" \
     --output "$OUTPUT" \
-    "$@"
+    "${EXTRA_ARGS[@]}"
