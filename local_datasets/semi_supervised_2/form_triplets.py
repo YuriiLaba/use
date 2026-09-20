@@ -287,7 +287,6 @@ if __name__ == "__main__":
                     )
 
     logging.info("Loading NLP models...")
-    spacy_nlp = spacy.load("uk_core_news_sm", enable=["lemmatizer"])
     udpipe_model = UDPipeModel(PATH_TO_SOURCE_UDPIPE)
     tokenizer = AutoTokenizer.from_pretrained(TOKENIZER)
 
