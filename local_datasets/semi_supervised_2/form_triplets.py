@@ -3,6 +3,7 @@ Run: python3 -m local_datasets.semi_supervised_2.form_triplets
 """
 
 import csv
+import argparse
 import hashlib
 import json
 import logging
@@ -98,6 +99,38 @@ def get_target_word_embedding_idx(udpipe_model, tokenizer, sentence: str, lemma:
         return word_in_sentence, None
 
     return word_positions[0]
+
+
+def parse_args():
+    parser = argparse.ArgumentParser(
+        description="Build WSD triplets from collected/generated and augmented data."
+    )
+    parser.add_argument("--dataset-path", default=DATASET_PATH)
+    parser.add_argument("--output-csv", default=OUTPUT_CSV)
+    parser.add_argument(
+        "--augmentation-path",
+        dest="augmentation_paths",
+        action="append",
+        help="Context augmentation JSONL path. Repeat for multiple files.",
+    )
+    parser.add_argument(
+        "--definitions-augmentation-path",
+        dest="definitions_augmentation_paths",
+        action="append",
+        help="Definition augmentation JSONL path. Repeat for multiple files.",
+    )
+    parser.add_argument(
+        "--no-augmented",
+        action="store_true",
+        help="Do not add augmented context sentences.",
+    )
+    parser.add_argument(
+        "--no-definitions-augmented",
+        action="store_true",
+        help="Do not add augmented definitions.",
+    )
+    parser.add_argument("--seed", type=int, default=42)
+    return parser.parse_args()
 
 
 def main():
@@ -214,7 +247,22 @@ def main():
 
 
 if __name__ == "__main__":
-    random.seed(42)
+    args = parse_args()
+
+    DATASET_PATH = args.dataset_path
+    OUTPUT_CSV = args.output_csv
+    USE_AUGMENTED = not args.no_augmented
+    USE_DEFINITIONS_AUGMENTED = not args.no_definitions_augmented
+
+    if args.augmentation_paths is not None:
+        AUGMENTATION_PATHS = tuple(args.augmentation_paths)
+
+    if args.definitions_augmentation_paths is not None:
+        DEFINITIONS_AUGMENTATION_PATHS = tuple(
+            args.definitions_augmentation_paths
+        )
+
+    random.seed(args.seed)
 
     if USE_AUGMENTED:
         augmented_sentences = defaultdict(list)
