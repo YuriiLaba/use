@@ -6,8 +6,8 @@ from dataclasses import dataclass, fields
 class TrainingConfig:
     # wandb specific
     log_to_wandb: bool = True
-    wandb_entity: str = "hellcaster-ukrainian-catholic-university"
-    wandb_project_name: str = "СonEFUv2"
+    wandb_entity: str = ""
+    wandb_project_name: str = "ucu-wsd-finetuning"
     wandb_run_name: str = None
     model_name: str | None = None
     evaluate_final_wsd: bool = True

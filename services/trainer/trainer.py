@@ -501,6 +501,18 @@ if __name__ == "__main__":
         help="Override wandb_run_name from config.",
     )
     parser.add_argument(
+        "--wandb-project",
+        type=str,
+        default=None,
+        help="Override the W&B project name.",
+    )
+    parser.add_argument(
+        "--wandb-entity",
+        type=str,
+        default=None,
+        help="Override the W&B entity/team. Empty uses the logged-in user's entity.",
+    )
+    parser.add_argument(
         "--model-name",
         type=str,
         default=None,
@@ -567,6 +579,10 @@ if __name__ == "__main__":
         config.train_data_path = args.train_data
     if args.run_name:
         config.wandb_run_name = args.run_name
+    if args.wandb_project is not None:
+        config.wandb_project_name = args.wandb_project
+    if args.wandb_entity is not None:
+        config.wandb_entity = args.wandb_entity
     if args.model_name:
         config.model_name = args.model_name
     if args.output_dir:

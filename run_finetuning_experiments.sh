@@ -23,8 +23,8 @@ SEEDS="42,123,456"
 SPLIT_SEED="42"
 MTEB_NUM_PROC="1"
 HF_REPO_PREFIX="${HF_REPO_PREFIX:-}"
-WANDB_PROJECT="${WANDB_PROJECT:-СonEFUv2}"
-WANDB_ENTITY="${WANDB_ENTITY:-hellcaster-ukrainian-catholic-university}"
+WANDB_PROJECT="${WANDB_PROJECT:-ucu-wsd-finetuning}"
+WANDB_ENTITY="${WANDB_ENTITY:-}"
 HF_PRIVATE=0
 NO_HF=0
 NO_WANDB=0
@@ -173,18 +173,25 @@ run_one() {
         --event started
 
     local train_status=0
-    "$PYTHON" -m services.trainer.trainer \
-        --config "$CONFIG" \
-        --device "cuda:${gpu}" \
-        --train-data "$dataset" \
-        --output-dir "$MODEL_ROOT" \
-        --model-name "$experiment_name" \
-        --run-name "$experiment_name" \
-        --pool-targets "$pool_targets" \
-        --seed "$seed" \
-        --split-seed "$SPLIT_SEED" \
-        --batch-size "$BATCH_SIZE" \
-        --skip-final-wsd-eval || train_status=$?
+    local train_args=(
+        "$PYTHON" -m services.trainer.trainer
+        --config "$CONFIG"
+        --device "cuda:${gpu}"
+        --train-data "$dataset"
+        --output-dir "$MODEL_ROOT"
+        --model-name "$experiment_name"
+        --run-name "$experiment_name"
+        --pool-targets "$pool_targets"
+        --seed "$seed"
+        --split-seed "$SPLIT_SEED"
+        --batch-size "$BATCH_SIZE"
+        --wandb-project "$WANDB_PROJECT"
+        --skip-final-wsd-eval
+    )
+    if [[ -n "$WANDB_ENTITY" ]]; then
+        train_args+=(--wandb-entity "$WANDB_ENTITY")
+    fi
+    "${train_args[@]}" || train_status=$?
 
     if [[ "$train_status" -ne 0 || ! -f "$model_path/config.json" ]]; then
         echo "[GPU $gpu] Training failed or model was not saved: $experiment_name" >&2
@@ -204,8 +211,11 @@ run_one() {
         --results-dir "$result_dir"
         --mteb-num-proc "$MTEB_NUM_PROC"
         --wandb-project "$WANDB_PROJECT"
-        --wandb-entity "$WANDB_ENTITY"
     )
+
+    if [[ -n "$WANDB_ENTITY" ]]; then
+        eval_args+=(--wandb-entity "$WANDB_ENTITY")
+    fi
 
     if [[ "$NO_WANDB" -eq 1 ]]; then
         eval_args+=(--no-wandb)

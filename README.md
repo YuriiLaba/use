@@ -206,6 +206,10 @@ After generating the triplet CSV files with `./generate_all_triplets.sh`, run:
 wandb login
 huggingface-cli login
 
+export WANDB_PROJECT=ucu-wsd-finetuning
+# Set this only when logging to a W&B team/entity:
+# export WANDB_ENTITY=your-wandb-team
+
 ./run_finetuning_experiments.sh \
   --gpus 0,1,2,3 \
   --hf-repo-prefix YOUR_HF_USERNAME/ucu-wsd \

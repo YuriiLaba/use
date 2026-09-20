@@ -248,7 +248,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--mteb-num-proc", type=int, default=1)
     parser.add_argument(
         "--wandb-project",
-        default=os.getenv("WANDB_PROJECT", "СonEFUv2"),
+        default=os.getenv("WANDB_PROJECT", "ucu-wsd-finetuning"),
     )
     parser.add_argument("--wandb-entity", default=os.getenv("WANDB_ENTITY"))
     parser.add_argument("--no-wandb", action="store_true")
