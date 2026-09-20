@@ -197,3 +197,35 @@ Output:
 ```text
 local_datasets/raw_sentences/unique_lemma_sentences.jsonl
 ```
+
+## Fine-tune the paper configurations
+
+After generating the triplet CSV files with `./generate_all_triplets.sh`, run:
+
+```bash
+wandb login
+huggingface-cli login
+
+./run_finetuning_experiments.sh \
+  --gpus 0,1,2,3 \
+  --hf-repo-prefix YOUR_HF_USERNAME/ucu-wsd \
+  --delete-local-model
+```
+
+The runner excludes the two pretrained baseline rows and trains:
+
+```text
+8 training configurations × 2 pooling modes × 3 training seeds = 48 runs
+```
+
+Each GPU runs one independent experiment. Batch size defaults to `104` to match the paper. For a throughput-oriented run on 48 GB RTX 6000 cards, use `--batch-size 208`; this changes the optimization setup and is not an exact paper reproduction.
+
+`--delete-local-model` removes the final and best checkpoints after a successful Hugging Face upload. A temporary local copy is still required during training, evaluation, and upload; if the upload fails, the local checkpoint is retained.
+
+Models are saved locally under:
+
+```text
+models/fine-tuned-models/
+```
+
+Each run is evaluated on the Ukrainian WSD benchmark, STS-UK, and Ukrainian MTEB tasks. Metrics are saved under `results/finetuning/`, summarized in `results/finetuning_summary.csv`, logged to W&B, and uploaded with the model to a separate Hugging Face model repository.

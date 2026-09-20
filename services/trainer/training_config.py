@@ -9,6 +9,8 @@ class TrainingConfig:
     wandb_entity: str = "hellcaster-ukrainian-catholic-university"
     wandb_project_name: str = "СonEFUv2"
     wandb_run_name: str = None
+    model_name: str | None = None
+    evaluate_final_wsd: bool = True
 
     # paths
     path_to_save_fine_tuned_model: str = "models/fine-tuned-models"

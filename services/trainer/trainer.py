@@ -86,8 +86,7 @@ class Trainer:
         self.global_step = 0  # used for wandb logging steps
         self._init_logger()
 
-        if not os.path.isdir(self.config.path_to_save_fine_tuned_model):
-            os.mkdir(self.config.path_to_save_fine_tuned_model)
+        os.makedirs(self.config.path_to_save_fine_tuned_model, exist_ok=True)
 
         self._init_model()
 
@@ -292,6 +291,7 @@ class Trainer:
         self, model, path_to_save_model, save_sentence_transformer_format=True
     ):
         try:
+            os.makedirs(path_to_save_model, exist_ok=True)
             model.save_pretrained(path_to_save_model, from_pt=True)
             self.tokenizer.save_pretrained(path_to_save_model)
 
@@ -305,6 +305,10 @@ class Trainer:
                 sentence_transformer_model.save(path_to_save_model)
         except Exception as e:
             print(f"model not saved, error = {e}")
+
+    def _model_stem(self) -> str:
+        """Return a stable, human-readable model name for experiment runs."""
+        return self.config.model_name or f"model_{self.run_id}"
 
     @torch.no_grad()
     def evaluate_epoch(self, epoch, batch_count):
@@ -336,7 +340,10 @@ class Trainer:
 
             if batch_count > 0:
                 # save the model and upload to W&B as artifact if enabled
-                model_dir = f"{self.config.path_to_save_fine_tuned_model}/model_{self.run_id}_best"
+                model_dir = (
+                    f"{self.config.path_to_save_fine_tuned_model}/"
+                    f"{self._model_stem()}_best"
+                )
                 self._save_model(self.model, model_dir)
 
         else:
@@ -404,6 +411,7 @@ class Trainer:
                     return True  # reach early stopping rounds
 
     def train(self):
+        training_error = None
         try:
             # initial evaluation of the raw model
             for epoch in range(self.config.num_epochs):
@@ -414,7 +422,10 @@ class Trainer:
 
                 if early_stop:
                     path_to_save_model = self.config.path_to_save_fine_tuned_model
-                    model_name = f"{path_to_save_model}/model_{self.run_id}_{epoch}_early_stopped"
+                    model_name = (
+                        f"{path_to_save_model}/{self._model_stem()}_"
+                        f"{epoch}_early_stopped"
+                    )
                     self._save_model(self.model, model_name)
 
                     break
@@ -424,28 +435,35 @@ class Trainer:
                 # self._save_model(self.model, model_name)
         except Exception as e:
             print(f"Training interrupted, error = {e}")
+            training_error = e
         finally:
             path_to_save_model = self.config.path_to_save_fine_tuned_model
-            model_name = f"{path_to_save_model}/model_{self.run_id}_final"
+            model_name = f"{path_to_save_model}/{self._model_stem()}_final"
             self._save_model(self.model, model_name)
 
             try:
-                # final evaluation of the model
-                wsd_acc = evaluate_wsd(
-                    model_path=model_name,
-                    model_tokenizer_path=self.config.tokenizer_name,
-                    verbose=True,
-                    device=self.device,
-                )
+                if self.config.evaluate_final_wsd:
+                    # final evaluation of the model
+                    wsd_acc = evaluate_wsd(
+                        model_path=model_name,
+                        model_tokenizer_path=model_name,
+                        verbose=True,
+                        device=self.device,
+                    )
 
-                # log final WSD accuracy to W&B if enabled
-                if self.config.log_to_wandb:
-                    self.wandb_run.log({"test/wsd_acc": wsd_acc}, step=self.global_step)
+                    # log final WSD accuracy to W&B if enabled
+                    if self.config.log_to_wandb:
+                        self.wandb_run.log(
+                            {"test/wsd_acc": wsd_acc}, step=self.global_step
+                        )
             except Exception as e:
                 print(f"Final evaluation failed, error = {e}")
             finally:
                 if self.config.log_to_wandb:
                     wandb.finish()
+
+        if training_error is not None:
+            raise training_error
 
 
 if __name__ == "__main__":
@@ -481,6 +499,23 @@ if __name__ == "__main__":
         type=str,
         default=None,
         help="Override wandb_run_name from config.",
+    )
+    parser.add_argument(
+        "--model-name",
+        type=str,
+        default=None,
+        help="Stable model name used for the saved model directory.",
+    )
+    parser.add_argument(
+        "--output-dir",
+        type=str,
+        default=None,
+        help="Override the root directory for saved fine-tuned models.",
+    )
+    parser.add_argument(
+        "--skip-final-wsd-eval",
+        action="store_true",
+        help="Skip the trainer's final WSD evaluation; useful when an evaluation suite runs afterward.",
     )
     parser.add_argument(
         "--pool-targets",
@@ -532,6 +567,12 @@ if __name__ == "__main__":
         config.train_data_path = args.train_data
     if args.run_name:
         config.wandb_run_name = args.run_name
+    if args.model_name:
+        config.model_name = args.model_name
+    if args.output_dir:
+        config.path_to_save_fine_tuned_model = args.output_dir
+    if args.skip_final_wsd_eval:
+        config.evaluate_final_wsd = False
     if args.pool_targets is not None:
         config.pool_targets = args.pool_targets
     if args.hf_dataset:

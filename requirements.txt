@@ -18,6 +18,7 @@ smart-open
 langdetect
 tqdm
 wandb
+huggingface_hub
 python-dotenv
 openai
 ctranslate2
