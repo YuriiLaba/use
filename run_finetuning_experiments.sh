@@ -151,6 +151,11 @@ run_one() {
 
     if [[ "$FORCE" -eq 0 && -f "$metrics_path" ]]; then
         echo "[GPU $gpu] Skipping completed run: $experiment_name"
+        "$PYTHON" -m scripts.report_finetuning_status \
+            --results-dir "$RESULTS_ROOT" \
+            --total-runs "$TOTAL_RUNS" \
+            --current "$experiment_name" \
+            --event finished
         return 0
     fi
 
@@ -160,6 +165,12 @@ run_one() {
     echo "[GPU $gpu] Dataset:  $dataset"
     echo "[GPU $gpu] Batch:    $BATCH_SIZE"
     echo "============================================================"
+
+    "$PYTHON" -m scripts.report_finetuning_status \
+        --results-dir "$RESULTS_ROOT" \
+        --total-runs "$TOTAL_RUNS" \
+        --current "$experiment_name" \
+        --event started
 
     local train_status=0
     "$PYTHON" -m services.trainer.trainer \
@@ -211,6 +222,11 @@ run_one() {
 
     "${eval_args[@]}"
     echo "[GPU $gpu] Finished: $experiment_name"
+    "$PYTHON" -m scripts.report_finetuning_status \
+        --results-dir "$RESULTS_ROOT" \
+        --total-runs "$TOTAL_RUNS" \
+        --current "$experiment_name" \
+        --event finished
 }
 
 mkdir -p "$MODEL_ROOT" "$RESULTS_ROOT"
