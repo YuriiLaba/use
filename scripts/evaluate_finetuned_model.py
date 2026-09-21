@@ -44,14 +44,12 @@ from mteb.cache import ResultCache
 
 LOGGER = logging.getLogger(__name__)
 STS_DATASET = "anikol12/STSB-UK"
-# Exact Ukrainian MTEB tasks reported in the paper.  Do not use
-# ``mteb.get_tasks(languages=["ukr"])`` here: that discovers every Ukrainian
-# task in the installed MTEB version and can select incompatible task/data
-# configurations (for example, ``ukr_Cyrl``).
+# Exact MTEB task definitions reported in the paper.  In particular, the
+# paper uses the original seven-label SIB200 task, not SIB200.v2.
 MTEB_TASKS = [
     # Classification
-    "SIB200Classification.v2",
-    "UkrFormalityClassification.v2",
+    "SIB200Classification",
+    "UkrFormalityClassification",
     # Clustering
     "SIB200ClusteringS2S",
     # Bitext mining
@@ -66,6 +64,24 @@ MTEB_TASKS = [
     "WebFAQRetrieval",
 ]
 MTEB_MODALITIES = ["text"]
+
+# Restrict multilingual tasks to the Ukrainian subset used by the paper.
+# Without this mapping, MTEB loads every language configuration in a task;
+# some of those configurations are not present in the current HF snapshot
+# and produce errors such as ``BuilderConfig 'nya_Latn' not found``.
+MTEB_SUBSETS = {
+    "SIB200Classification": ["ukr_Cyrl"],
+    "UkrFormalityClassification": ["default"],
+    "SIB200ClusteringS2S": ["ukr_Cyrl"],
+    "WebFAQBitextMiningQAs": ["eng-ukr"],
+    "WebFAQBitextMiningQuestions": ["eng-ukr"],
+    "NTREXBitextMining": ["eng_Latn-ukr_Cyrl"],
+    "BibleNLPBitextMining": ["eng_Latn-ukr_Cyrl"],
+    "FloresBitextMining": ["eng_Latn-ukr_Cyrl"],
+    "Tatoeba": ["ukr-eng"],
+    "BelebeleRetrieval": ["ukr_Cyrl-ukr_Cyrl"],
+    "WebFAQRetrieval": ["ukr"],
+}
 
 
 def safe_name(value: str) -> str:
@@ -140,7 +156,22 @@ def evaluate_mteb(
         for task in tasks
         if task.metadata.modalities == MTEB_MODALITIES
     ]
-    LOGGER.info("Evaluating %d paper-specified MTEB tasks", len(tasks))
+    for task in tasks:
+        requested_subsets = MTEB_SUBSETS[task.metadata.name]
+        available_subsets = set(task.hf_subsets)
+        missing_subsets = set(requested_subsets) - available_subsets
+        if missing_subsets:
+            raise ValueError(
+                f"MTEB task {task.metadata.name} does not provide subset(s): "
+                f"{sorted(missing_subsets)}. Available subsets include: "
+                f"{sorted(available_subsets)[:10]}"
+            )
+        task.hf_subsets = requested_subsets
+
+    LOGGER.info(
+        "Evaluating %d paper-specified MTEB tasks on Ukrainian subsets",
+        len(tasks),
+    )
 
     model = SentenceTransformer(model_path, device=device)
     safe_model = safe_name(Path(model_path).name)
