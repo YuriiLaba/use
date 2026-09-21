@@ -144,19 +144,25 @@ run_one() {
     local result_dir="${RESULTS_ROOT}/${experiment_name}"
     local metrics_path="${result_dir}/metrics.json"
     local repo_id=""
+    local retry_upload=0
 
     if [[ "$NO_HF" -eq 0 ]]; then
         repo_id="$(repo_id_for "$experiment_name")"
     fi
 
     if [[ "$FORCE" -eq 0 && -f "$metrics_path" ]]; then
-        echo "[GPU $gpu] Skipping completed run: $experiment_name"
-        "$PYTHON" -m scripts.report_finetuning_status \
-            --results-dir "$RESULTS_ROOT" \
-            --total-runs "$TOTAL_RUNS" \
-            --current "$experiment_name" \
-            --event finished
-        return 0
+        if [[ "$NO_HF" -eq 1 || "$(grep -c '"huggingface_url"' "$metrics_path" || true)" -gt 0 ]]; then
+            echo "[GPU $gpu] Skipping completed run: $experiment_name"
+            "$PYTHON" -m scripts.report_finetuning_status \
+                --results-dir "$RESULTS_ROOT" \
+                --total-runs "$TOTAL_RUNS" \
+                --current "$experiment_name" \
+                --event finished
+            return 0
+        elif [[ -f "$model_path/config.json" ]]; then
+            retry_upload=1
+            echo "[GPU $gpu] Retrying evaluation/upload without retraining: $experiment_name"
+        fi
     fi
 
     echo
@@ -172,30 +178,32 @@ run_one() {
         --current "$experiment_name" \
         --event started
 
-    local train_status=0
-    local train_args=(
-        "$PYTHON" -m services.trainer.trainer
-        --config "$CONFIG"
-        --device "cuda:${gpu}"
-        --train-data "$dataset"
-        --output-dir "$MODEL_ROOT"
-        --model-name "$experiment_name"
-        --run-name "$experiment_name"
-        --pool-targets "$pool_targets"
-        --seed "$seed"
-        --split-seed "$SPLIT_SEED"
-        --batch-size "$BATCH_SIZE"
-        --wandb-project "$WANDB_PROJECT"
-        --skip-final-wsd-eval
-    )
-    if [[ -n "$WANDB_ENTITY" ]]; then
-        train_args+=(--wandb-entity "$WANDB_ENTITY")
-    fi
-    "${train_args[@]}" || train_status=$?
+    if [[ "$retry_upload" -eq 0 ]]; then
+        local train_status=0
+        local train_args=(
+            "$PYTHON" -m services.trainer.trainer
+            --config "$CONFIG"
+            --device "cuda:${gpu}"
+            --train-data "$dataset"
+            --output-dir "$MODEL_ROOT"
+            --model-name "$experiment_name"
+            --run-name "$experiment_name"
+            --pool-targets "$pool_targets"
+            --seed "$seed"
+            --split-seed "$SPLIT_SEED"
+            --batch-size "$BATCH_SIZE"
+            --wandb-project "$WANDB_PROJECT"
+            --skip-final-wsd-eval
+        )
+        if [[ -n "$WANDB_ENTITY" ]]; then
+            train_args+=(--wandb-entity "$WANDB_ENTITY")
+        fi
+        "${train_args[@]}" || train_status=$?
 
-    if [[ "$train_status" -ne 0 || ! -f "$model_path/config.json" ]]; then
-        echo "[GPU $gpu] Training failed or model was not saved: $experiment_name" >&2
-        return 1
+        if [[ "$train_status" -ne 0 || ! -f "$model_path/config.json" ]]; then
+            echo "[GPU $gpu] Training failed or model was not saved: $experiment_name" >&2
+            return 1
+        fi
     fi
 
     local eval_args=(

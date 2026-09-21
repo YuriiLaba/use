@@ -44,7 +44,27 @@ from mteb.cache import ResultCache
 
 LOGGER = logging.getLogger(__name__)
 STS_DATASET = "anikol12/STSB-UK"
-MTEB_LANGUAGES = ["ukr"]
+# Exact Ukrainian MTEB tasks reported in the paper.  Do not use
+# ``mteb.get_tasks(languages=["ukr"])`` here: that discovers every Ukrainian
+# task in the installed MTEB version and can select incompatible task/data
+# configurations (for example, ``ukr_Cyrl``).
+MTEB_TASKS = [
+    # Classification
+    "SIB200Classification.v2",
+    "UkrFormalityClassification.v2",
+    # Clustering
+    "SIB200ClusteringS2S",
+    # Bitext mining
+    "WebFAQBitextMiningQAs",
+    "WebFAQBitextMiningQuestions",
+    "NTREXBitextMining",
+    "BibleNLPBitextMining",
+    "FloresBitextMining",
+    "Tatoeba",
+    # Retrieval
+    "BelebeleRetrieval",
+    "WebFAQRetrieval",
+]
 MTEB_MODALITIES = ["text"]
 
 
@@ -114,15 +134,13 @@ def evaluate_mteb(
     device: str,
     num_proc: int,
 ) -> tuple[dict[str, Any], dict[str, float]]:
-    tasks = mteb.get_tasks(
-        languages=MTEB_LANGUAGES,
-        modalities=MTEB_MODALITIES,
-    )
+    tasks = mteb.get_tasks(tasks=MTEB_TASKS)
     tasks = [
         task
         for task in tasks
         if task.metadata.modalities == MTEB_MODALITIES
     ]
+    LOGGER.info("Evaluating %d paper-specified MTEB tasks", len(tasks))
 
     model = SentenceTransformer(model_path, device=device)
     safe_model = safe_name(Path(model_path).name)
