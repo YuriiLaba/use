@@ -18,29 +18,13 @@ from pathlib import Path
 import pandas as pd
 
 from eval.eval_wsd import evaluate_wsd
-from services.config import HOMONYM_BENCHMARK_PATH
+from services.config import HOMONYM_BENCHMARK_PATH, get_list, get_value
 
 
 logger = logging.getLogger(__name__)
 
 
-MODELS = [
-    "lang-uk/electra-base-ukrainian-cased-discriminator",
-    "ukr-models/xlm-roberta-base-uk",
-    "google-bert/bert-base-multilingual-cased",
-    "intfloat/multilingual-e5-small",
-    "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2",
-    "benjamin/roberta-large-wechsel-ukrainian",
-    "FacebookAI/xlm-roberta-base",
-    "Goader/modern-liberta-large",
-    "intfloat/multilingual-e5-base",
-    "sentence-transformers/paraphrase-multilingual-mpnet-base-v2",
-    "lang-uk/ukr-paraphrase-multilingual-mpnet-base",
-    "Qwen/Qwen3-Embedding-0.6B",
-    "FacebookAI/xlm-roberta-large",
-    "intfloat/multilingual-e5-large",
-    "intfloat/multilingual-e5-large-instruct",
-]
+MODELS = get_list("baseline_models", "wsd")
 
 
 def evaluate_models(models, benchmark_path, device, output_path):
@@ -148,12 +132,12 @@ def main():
     )
     parser.add_argument(
         "--device",
-        default="cpu",
-        help="Inference device. Defaults to cpu for macOS.",
+        default=get_value("evaluation", "device", "cpu"),
+        help="Inference device. Defaults to the value in project_config.ini.",
     )
     parser.add_argument(
         "--output",
-        default="wsd_model_results.csv",
+        default=get_value("evaluation", "wsd_output", "wsd_model_results.csv"),
         help="Output CSV path.",
     )
     args = parser.parse_args()

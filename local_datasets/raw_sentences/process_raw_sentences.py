@@ -10,13 +10,14 @@ from collections import defaultdict
 
 from tqdm import tqdm
 
-from services.config import UNIQUE_LEMMAS_WITH_SENTENCES_FILE
+from services.config import UNIQUE_LEMMAS_WITH_SENTENCES_FILE, get_value
 
 
 def main():
     """Gather unique sentences for each lemma from raw sentence files and save them to a JSONL file."""
     unique_sentences = defaultdict(set)
-    sentences_files = list(sorted(glob("local_datasets/raw_sentences/*.json")))
+    raw_sentences_dir = get_value("paths", "raw_sentences_dir", "local_datasets/raw_sentences")
+    sentences_files = list(sorted(glob(f"{raw_sentences_dir}/*.json")))
 
     if UNIQUE_LEMMAS_WITH_SENTENCES_FILE in sentences_files:
         sentences_files.remove(UNIQUE_LEMMAS_WITH_SENTENCES_FILE)

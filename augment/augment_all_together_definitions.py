@@ -10,7 +10,7 @@ from tqdm import tqdm
 from torch.utils.data import DataLoader
 
 from services.udpipe_model import UDPipeModel
-from services.config import PATH_TO_SOURCE_UDPIPE
+from services.config import PATH_TO_SOURCE_UDPIPE, get_float, get_int, get_value
 
 from augment.common import TextDataset, ThreadedWriter, set_random_seed
 from augment.dropout.dropouter import Dropouter
@@ -23,19 +23,14 @@ from augment.translation.back_translator import (
 from augment.common import markov_process
 
 
-INPUT_TEXTS_PATH = (
-    "local_datasets/semi_supervised_2/merged_collected_and_generated_mpnet.json"
-)
-OUTPUT_TEXTS_PATH = (
-    "local_datasets/augmented/all_together/augmented_sentences_definitions_3.jsonl"
-)
-
-BATCH_SIZE = 128
-NUM_WORKERS = 2
-NUM_AUGMENTATIONS = 9
-MARKOV_P = 0.75
-SEED = 42
-GPU_ID = int(os.getenv("AUGMENT_GPU_ID", "0"))
+INPUT_TEXTS_PATH = get_value("augmentation", "input_dataset")
+OUTPUT_TEXTS_PATH = get_value("augmentation", "combined_definitions_output")
+BATCH_SIZE = get_int("augmentation", "combined_batch_size", 128)
+NUM_WORKERS = get_int("augmentation", "num_workers", 2)
+NUM_AUGMENTATIONS = get_int("augmentation", "combined_variants", 9)
+MARKOV_P = get_float("augmentation", "combined_markov_probability", 0.75)
+SEED = get_int("augmentation", "seed", 42)
+GPU_ID = int(os.getenv("AUGMENT_GPU_ID", get_value("augmentation", "combined_definitions_gpu", "0")))
 
 logging.basicConfig(
     level=logging.INFO,
@@ -58,22 +53,22 @@ def main():
     shuffler = Dropouter(udpipe_model)
     token_shuffler = TokenShuffler(udpipe_model)
     masker = Masker(
-        "Goader/modern-liberta-large",
+        get_value("models", "mask_model", "Goader/modern-liberta-large"),
         udpipe_model,
         seed=SEED,
-        batch_size=1024,
+        batch_size=get_int("augmentation", "combined_mask_batch_size", 1024),
         device_index=GPU_ID,
     )
     pivot1 = HelsinkiCTranslateTranslator(
-        "models/translators/opus-mt-zle-en-ct2",
-        "Helsinki-NLP/opus-mt-tc-big-zle-en",
+        get_value("models", "translation_uk_en"),
+        get_value("models", "translation_hf_uk_en"),
         device="cuda",
         device_index=[GPU_ID],
     )
 
     pivot2 = HelsinkiCTranslateTranslator(
-        "models/translators/opus-mt-en-zle-ct2",
-        "Helsinki-NLP/opus-mt-tc-big-en-zle",
+        get_value("models", "translation_en_uk"),
+        get_value("models", "translation_hf_en_uk"),
         device="cuda",
         device_index=[GPU_ID],
     )

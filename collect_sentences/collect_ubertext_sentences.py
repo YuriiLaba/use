@@ -21,10 +21,12 @@ from services.config import (
     PATH_TO_SAVE_GATHERED_DATASET,
     PATH_TO_LEMMAS_OF_INTEREST,
     NUMBER_OF_EXAMPLES_TO_GATHER,
+    get_int,
+    get_value,
 )
 
-CHUNK_SIZE = 128
-SAVE_EVERY_N_SENTENCES = 50_000
+CHUNK_SIZE = get_int("collection", "chunk_size", 128)
+SAVE_EVERY_N_SENTENCES = get_int("collection", "save_every", 50_000)
 
 TOKENIZER = None  # udpipe or spacy
 tokenizer_model = None
@@ -234,7 +236,10 @@ def load_tokenizer_model(tokenizer_type: str):
     elif tokenizer_type == "spacy":
         import spacy
 
-        tokenizer_model = spacy.load("uk_core_news_sm", enable=["lemmatizer"])
+        tokenizer_model = spacy.load(
+            get_value("collection", "spacy_model", "uk_core_news_sm"),
+            enable=["lemmatizer"],
+        )
     else:
         raise ValueError("Unsupported tokenizer specified.")
 
@@ -277,7 +282,7 @@ def parse_args() -> argparse.Namespace:
         "--tokenizer",
         type=str,
         choices=["udpipe", "spacy"],
-        default="udpipe",
+        default=get_value("collection", "tokenizer", "udpipe"),
         help="Tokenizer to use: 'udpipe' or 'spacy'.",
     )
     parser.add_argument(

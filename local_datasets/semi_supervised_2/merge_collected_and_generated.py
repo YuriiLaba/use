@@ -1,10 +1,18 @@
 import json
+from services.config import get_value
 
-COLLECTED_SENTENCES_PATH = (
-    "local_datasets/semi_supervised_2/lemmas_with_meanings_and_sentences_mpnet_filtered.json"
+COLLECTED_SENTENCES_PATH = get_value(
+    "paths", "filtered_grouped",
+    "local_datasets/semi_supervised_2/lemmas_with_meanings_and_sentences_mpnet_filtered.json",
 )
-GENERATED_SENTENCES_PATH = "local_datasets/semi_supervised_2/generated_sentences.jsonl"
-OUTPUT_PATH = "local_datasets/semi_supervised_2/merged_collected_and_generated_mpnet.json"
+GENERATED_SENTENCES_PATH = get_value(
+    "paths", "generated_sentences",
+    "local_datasets/semi_supervised_2/generated_sentences.jsonl",
+)
+OUTPUT_PATH = get_value(
+    "paths", "merged_dataset",
+    "local_datasets/semi_supervised_2/merged_collected_and_generated_mpnet.json",
+)
 
 
 def main():

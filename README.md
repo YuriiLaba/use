@@ -11,6 +11,12 @@ Research code for Ukrainian word-sense disambiguation using multilingual transfo
 
 The dependency versions are currently not pinned.
 
+## Central configuration
+
+The active pipeline uses [`project_config.ini`](project_config.ini) as its single configuration file. It contains the paths and parameters for corpus collection, meaning assignment, filtering, generation, augmentation, triplet construction, training, evaluation, W&B, and Hugging Face uploads.
+
+Run commands from the repository root. The shell runners read this file automatically; use `--config PATH` when a separate experiment configuration is required. Python modules also read it through the `PIPELINE_CONFIG` environment variable.
+
 ## Environment setup
 
 Run from the repository root:
@@ -211,6 +217,7 @@ export WANDB_PROJECT=ucu-wsd-finetuning
 # export WANDB_ENTITY=your-wandb-team
 
 ./run_finetuning_experiments.sh \
+  --config project_config.ini \
   --gpus 0,1,2,3 \
   --hf-repo-prefix YOUR_HF_USERNAME/ucu-wsd \
   --delete-local-model

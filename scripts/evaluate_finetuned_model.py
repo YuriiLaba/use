@@ -32,7 +32,7 @@ from sentence_transformers import SentenceTransformer
 from sentence_transformers.sentence_transformer import evaluation
 
 from eval.eval_wsd import evaluate_wsd
-from services.config import HOMONYM_BENCHMARK_PATH
+from services.config import HOMONYM_BENCHMARK_PATH, get_list, get_value
 
 # Keep MTEB's cache inside the project so evaluation does not depend on a
 # writable user-home directory (important on managed servers and containers).
@@ -43,44 +43,19 @@ from mteb.cache import ResultCache
 
 
 LOGGER = logging.getLogger(__name__)
-STS_DATASET = "anikol12/STSB-UK"
+STS_DATASET = get_value("evaluation", "sts_dataset", "anikol12/STSB-UK")
 # Exact MTEB task definitions reported in the paper.  In particular, the
 # paper uses the original seven-label SIB200 task, not SIB200.v2.
-MTEB_TASKS = [
-    # Classification
-    "SIB200Classification",
-    "UkrFormalityClassification",
-    # Clustering
-    "SIB200ClusteringS2S",
-    # Bitext mining
-    "WebFAQBitextMiningQAs",
-    "WebFAQBitextMiningQuestions",
-    "NTREXBitextMining",
-    "BibleNLPBitextMining",
-    "FloresBitextMining",
-    "Tatoeba",
-    # Retrieval
-    "BelebeleRetrieval",
-    "WebFAQRetrieval",
-]
-MTEB_MODALITIES = ["text"]
+MTEB_TASKS = get_list("mteb", "tasks")
+MTEB_MODALITIES = get_list("mteb", "modalities", ["text"])
 
 # Restrict multilingual tasks to the Ukrainian subset used by the paper.
 # Without this mapping, MTEB loads every language configuration in a task;
 # some of those configurations are not present in the current HF snapshot
 # and produce errors such as ``BuilderConfig 'nya_Latn' not found``.
 MTEB_SUBSETS = {
-    "SIB200Classification": ["ukr_Cyrl"],
-    "UkrFormalityClassification": ["default"],
-    "SIB200ClusteringS2S": ["ukr_Cyrl"],
-    "WebFAQBitextMiningQAs": ["eng-ukr"],
-    "WebFAQBitextMiningQuestions": ["eng-ukr"],
-    "NTREXBitextMining": ["eng_Latn-ukr_Cyrl"],
-    "BibleNLPBitextMining": ["eng_Latn-ukr_Cyrl"],
-    "FloresBitextMining": ["eng_Latn-ukr_Cyrl"],
-    "Tatoeba": ["ukr-eng"],
-    "BelebeleRetrieval": ["ukr_Cyrl-ukr_Cyrl"],
-    "WebFAQRetrieval": ["ukr"],
+    task_name: get_list("mteb_subsets", task_name)
+    for task_name in MTEB_TASKS
 }
 
 

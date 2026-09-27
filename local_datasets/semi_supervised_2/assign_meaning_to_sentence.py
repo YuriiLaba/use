@@ -18,24 +18,34 @@ from sentence_transformers import SentenceTransformer
 from sklearn.metrics.pairwise import cosine_similarity
 from tqdm import tqdm
 
-from services.config import HOMONYM_BENCHMARK_PATH, UNIQUE_LEMMAS_WITH_SENTENCES_FILE
+from services.config import (
+    EMBEDDER_MODEL,
+    HOMONYM_BENCHMARK_PATH,
+    UNIQUE_LEMMAS_WITH_SENTENCES_FILE,
+    get_float,
+    get_int,
+    get_value,
+)
 from services.utils_data import read_homonym_benchmark
 
 
 logger = logging.getLogger(__name__)
 
 
-BATCH_SIZE = 2048
-TEMPERATURE = 0.05
-CUT_OFF_PROBABILITY = 0.9
-CUT_OFF_SIMILARITY = 0.6
-EMBEDDER_MODEL = "sentence-transformers/paraphrase-multilingual-mpnet-base-v2"
+BATCH_SIZE = get_int("assignment", "batch_size", 2048)
+TEMPERATURE = get_float("assignment", "temperature", 0.05)
+CUT_OFF_PROBABILITY = get_float("assignment", "cutoff_probability", 0.9)
+CUT_OFF_SIMILARITY = get_float("assignment", "cutoff_similarity", 0.6)
 
 # Keep this flat JSONL output for inspection and auditing of individual
 # sentence-to-meaning assignments.
-MEANINGS_PATH = "./local_datasets/semi_supervised_2/assigned_meanings_mpnet.jsonl"
-LEMMAS_WITH_MEANINGS_AND_SENTENCES_PATH = (
-    "./local_datasets/semi_supervised_2/lemmas_with_meanings_and_sentences_mpnet.json"
+MEANINGS_PATH = get_value(
+    "paths", "assigned_meanings",
+    "local_datasets/semi_supervised_2/assigned_meanings_mpnet.jsonl",
+)
+LEMMAS_WITH_MEANINGS_AND_SENTENCES_PATH = get_value(
+    "paths", "assigned_grouped",
+    "local_datasets/semi_supervised_2/lemmas_with_meanings_and_sentences_mpnet.json",
 )
 
 

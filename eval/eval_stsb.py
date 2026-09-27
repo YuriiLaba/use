@@ -2,41 +2,15 @@ import pandas as pd
 
 from datasets import load_dataset
 from sentence_transformers import SentenceTransformer, evaluation
+from services.config import get_list, get_value
 
 
-model_name_or_path = "lang-uk/ukr-paraphrase-multilingual-mpnet-base"
-benchmark_hf = "anikol12/STSB-UK"
+model_name_or_path = get_value(
+    "models", "base_model", "sentence-transformers/paraphrase-multilingual-mpnet-base-v2"
+)
+benchmark_hf = get_value("evaluation", "sts_dataset", "anikol12/STSB-UK")
 
-# pool targets: false
-# models = [
-#     "lang-uk/ukr-paraphrase-multilingual-mpnet-base",
-#     "sentence-transformers/paraphrase-multilingual-mpnet-base-v2",
-# "models/fine-tuned-models/model_7wd97f4o_final",
-# "models/fine-tuned-models/model_u9l23623_final",
-# "models/fine-tuned-models/model_pt0axf82_final",
-# "models/fine-tuned-models/model_1ezktszs_final",
-# "models/fine-tuned-models/model_ok0ia00j_final",
-# "models/fine-tuned-models/model_rpwv6n2t_final",
-# "models/fine-tuned-models/model_a3eh99hl_final",
-# "models/fine-tuned-models/model_xwzpoedx_final",
-# "models/fine-tuned-models/model_8099d7r8_final",
-# ]
-
-# pool targets: true
-models = [
-    "lang-uk/ukr-paraphrase-multilingual-mpnet-base",
-    "sentence-transformers/paraphrase-multilingual-mpnet-base-v2",
-    "models/fine-tuned-models/model_p1l04h2q_final",
-    "models/fine-tuned-models/model_ksqah5x7_final",
-    "models/fine-tuned-models/model_5yjgpx88_final",
-    "models/fine-tuned-models/model_4gi9x91e_final",
-    "models/fine-tuned-models/model_16mhe55g_final",
-    "models/fine-tuned-models/model_69wvrfad_final",
-    "models/fine-tuned-models/model_rwy4jgup_final",
-    "models/fine-tuned-models/model_jrntf6jg_final",
-    "models/fine-tuned-models/model_r4z3fy8z_final",
-    "models/fine-tuned-models/model_vbngi6nk_final",
-]
+models = get_list("baseline_models", "wsd")
 
 
 def main(model_paths=None, device=None):
@@ -90,7 +64,9 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Evaluate Ukrainian STS-B correlations.")
     parser.add_argument("--models", nargs="+", default=None)
     parser.add_argument(
-        "--device", default=None, help="For example cuda:0 or cpu; default auto."
+        "--device",
+        default=get_value("evaluation", "device", "cpu"),
+        help="For example cuda:0 or cpu.",
     )
     args = parser.parse_args()
     main(args.models, args.device)

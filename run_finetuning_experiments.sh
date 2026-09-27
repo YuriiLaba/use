@@ -13,23 +13,44 @@ ROOT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 cd "$ROOT_DIR"
 
 PYTHON="$ROOT_DIR/.venv/bin/python"
-CONFIG="services/trainer/fine_tuning_config.ini"
-MODEL_ROOT="models/fine-tuned-models"
-RESULTS_ROOT="results/finetuning"
-BENCHMARK="datasets_pre_defined/ukrainian_wsd_benchmark.jsonl"
-GPU_LIST="0,1,2,3"
-BATCH_SIZE="104"
-SEEDS="42,123,456"
-SPLIT_SEED="42"
-MTEB_NUM_PROC="1"
-HF_REPO_PREFIX="${HF_REPO_PREFIX:-}"
-WANDB_PROJECT="${WANDB_PROJECT:-ucu-wsd-finetuning}"
-WANDB_ENTITY="${WANDB_ENTITY:-}"
+CONFIG="${PIPELINE_CONFIG:-$ROOT_DIR/project_config.ini}"
+
+# Resolve --config before reading defaults from the selected INI file.
+for ((config_arg_index=1; config_arg_index <= $#; config_arg_index++)); do
+    if [[ "${!config_arg_index}" == "--config" ]]; then
+        next_config_index=$((config_arg_index + 1))
+        if [[ "$next_config_index" -gt "$#" ]]; then
+            echo "Missing value for --config" >&2
+            exit 2
+        fi
+        CONFIG="${!next_config_index}"
+    fi
+done
+
+config_value() {
+    "$PYTHON" -m services.config --config "$CONFIG" --get "$1" "$2"
+}
+
+MODEL_ROOT="$(config_value paths models_dir)"
+RESULTS_ROOT="$(config_value evaluation results_dir)"
+BENCHMARK="$(config_value paths benchmark)"
+GPU_LIST="$(config_value experiments gpus)"
+BATCH_SIZE="$(config_value training batch_size)"
+SEEDS="$(config_value experiments seeds)"
+SPLIT_SEED="$(config_value training split_seed)"
+MTEB_NUM_PROC="$(config_value evaluation mteb_num_proc)"
+HF_REPO_PREFIX="${HF_REPO_PREFIX:-$(config_value huggingface repo_prefix)}"
+WANDB_PROJECT="${WANDB_PROJECT:-$(config_value wandb wandb_project_name)}"
+WANDB_ENTITY="${WANDB_ENTITY:-$(config_value wandb wandb_entity)}"
 HF_PRIVATE=0
 NO_HF=0
 NO_WANDB=0
 DELETE_LOCAL=0
 FORCE=0
+
+if [[ "$(config_value huggingface private)" == "true" ]]; then HF_PRIVATE=1; fi
+if [[ "$(config_value huggingface delete_local_model)" == "true" ]]; then DELETE_LOCAL=1; fi
+if [[ "$(config_value experiments force)" == "true" ]]; then FORCE=1; fi
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -98,14 +119,14 @@ CONDITION_NAMES=(
 )
 
 CONDITION_FILES=(
-    "local_datasets/semi_supervised_2/triplets/triplets_natural.csv"
-    "local_datasets/semi_supervised_2/triplets/triplets_generation.csv"
-    "local_datasets/semi_supervised_2/triplets/triplets_generation_mask.csv"
-    "local_datasets/semi_supervised_2/triplets/triplets_generation_dropout.csv"
-    "local_datasets/semi_supervised_2/triplets/triplets_generation_translation.csv"
-    "local_datasets/semi_supervised_2/triplets/triplets_generation_token_shuffling.csv"
-    "local_datasets/semi_supervised_2/triplets/triplets_generation_stochastic_combination.csv"
-    "local_datasets/semi_supervised_2/triplets/triplets_generation_all_combined.csv"
+    "$(config_value triplets natural_output)"
+    "$(config_value triplets generation_output)"
+    "$(config_value triplets mask_output)"
+    "$(config_value triplets dropout_output)"
+    "$(config_value triplets translation_output)"
+    "$(config_value triplets shuffling_output)"
+    "$(config_value triplets stochastic_output)"
+    "$(config_value triplets all_combined_output)"
 )
 
 for dataset in "${CONDITION_FILES[@]}"; do

@@ -473,7 +473,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--config",
         type=str,
-        default="services/trainer/fine_tuning_config.ini",
+        default="project_config.ini",
         help="Path to the training config file",
     )
     parser.add_argument(

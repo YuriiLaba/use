@@ -3,12 +3,21 @@ import argparse
 import numpy as np
 from sentence_transformers import SentenceTransformer
 from sklearn.metrics.pairwise import cosine_similarity
+from services.config import get_float, get_int, get_value
 
-INPUT_FILE = "local_datasets/semi_supervised_2/lemmas_with_meanings_and_sentences_mpnet.json"
-OUTPUT_FILE = "local_datasets/semi_supervised_2/lemmas_with_meanings_and_sentences_mpnet_filtered.json"
-MODEL_NAME = "sentence-transformers/paraphrase-multilingual-mpnet-base-v2"
-THRESHOLD = 0.95
-BATCH_SIZE = 512
+INPUT_FILE = get_value(
+    "paths", "assigned_grouped",
+    "local_datasets/semi_supervised_2/lemmas_with_meanings_and_sentences_mpnet.json",
+)
+OUTPUT_FILE = get_value(
+    "paths", "filtered_grouped",
+    "local_datasets/semi_supervised_2/lemmas_with_meanings_and_sentences_mpnet_filtered.json",
+)
+MODEL_NAME = get_value(
+    "filtering", "model", "sentence-transformers/paraphrase-multilingual-mpnet-base-v2"
+)
+THRESHOLD = get_float("filtering", "threshold", 0.95)
+BATCH_SIZE = get_int("filtering", "batch_size", 512)
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--dry-run", action="store_true", help="Print sample matches without saving")

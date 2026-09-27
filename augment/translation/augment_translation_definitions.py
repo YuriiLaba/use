@@ -8,6 +8,7 @@ from tqdm import tqdm
 from torch.utils.data import Dataset, DataLoader
 
 from augment.common import TextDataset, ThreadedWriter, set_random_seed
+from services.config import get_int, get_value
 
 from augment.translation.back_translator import (
     BackTranslator,
@@ -16,31 +17,28 @@ from augment.translation.back_translator import (
     NLLB200TransformersTranslator,
 )
 
-INPUT_TEXTS_PATH = "local_datasets/semi_supervised_2/merged_collected_and_generated_mpnet.json"
-OUTPUT_TEXTS_PATH = (
-    "local_datasets/augmented/translation/augmented_sentences_translated_definitions.jsonl"
-)
-
-BATCH_SIZE = 256
-NUM_WORKERS = 2
-NUM_AUGMENTATIONS = 4
-SEED = 42
-GPU_ID = int(os.getenv("AUGMENT_GPU_ID", "0"))
+INPUT_TEXTS_PATH = get_value("augmentation", "input_dataset")
+OUTPUT_TEXTS_PATH = get_value("augmentation", "translation_definitions_output")
+BATCH_SIZE = get_int("augmentation", "batch_size", 256)
+NUM_WORKERS = get_int("augmentation", "num_workers", 2)
+NUM_AUGMENTATIONS = get_int("augmentation", "num_variants", 4)
+SEED = get_int("augmentation", "seed", 42)
+GPU_ID = int(os.getenv("AUGMENT_GPU_ID", get_value("augmentation", "translation_definitions_gpu", "0")))
 
 # generating BATCH_SIZE x NUM_AUGMENTATIONS augmented per batch
 
 def main():
     set_random_seed(SEED)
     pivot1 = HelsinkiCTranslateTranslator(
-        "models/translators/opus-mt-zle-en-ct2",
-        "Helsinki-NLP/opus-mt-tc-big-zle-en",
+        get_value("models", "translation_uk_en"),
+        get_value("models", "translation_hf_uk_en"),
         device="cuda",
         device_index=[GPU_ID],
     )
 
     pivot2 = HelsinkiCTranslateTranslator(
-        "models/translators/opus-mt-en-zle-ct2",
-        "Helsinki-NLP/opus-mt-tc-big-en-zle",
+        get_value("models", "translation_en_uk"),
+        get_value("models", "translation_hf_en_uk"),
         device="cuda",
         device_index=[GPU_ID],
     )

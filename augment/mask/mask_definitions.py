@@ -9,23 +9,18 @@ from tqdm import tqdm
 from torch.utils.data import DataLoader
 
 from services.udpipe_model import UDPipeModel
-from services.config import PATH_TO_SOURCE_UDPIPE
+from services.config import PATH_TO_SOURCE_UDPIPE, get_int, get_value
 
 from augment.common import TextDataset, ThreadedWriter, set_random_seed
 from augment.mask.masker import Masker
 
-INPUT_TEXTS_PATH = (
-    "local_datasets/semi_supervised_2/merged_collected_and_generated_mpnet.json"
-)
-OUTPUT_TEXTS_PATH = (
-    "local_datasets/augmented/mask/augmented_sentences_definitions.jsonl"
-)
-
-BATCH_SIZE = 256
-NUM_WORKERS = 2
-NUM_AUGMENTATIONS = 4
-SEED = 42
-GPU_ID = int(os.getenv("AUGMENT_GPU_ID", "0"))
+INPUT_TEXTS_PATH = get_value("augmentation", "input_dataset")
+OUTPUT_TEXTS_PATH = get_value("augmentation", "mask_definitions_output")
+BATCH_SIZE = get_int("augmentation", "batch_size", 256)
+NUM_WORKERS = get_int("augmentation", "num_workers", 2)
+NUM_AUGMENTATIONS = get_int("augmentation", "num_variants", 4)
+SEED = get_int("augmentation", "seed", 42)
+GPU_ID = int(os.getenv("AUGMENT_GPU_ID", get_value("augmentation", "mask_definitions_gpu", "0")))
 
 logging.basicConfig(
     level=logging.INFO,
@@ -46,11 +41,11 @@ def main():
 
     udpipe_model = UDPipeModel(PATH_TO_SOURCE_UDPIPE)
     shuffler = Masker(
-        "Goader/modern-liberta-large",
+        get_value("models", "mask_model", "Goader/modern-liberta-large"),
         udpipe=udpipe_model,
-        rate=0.15,
+        rate=float(get_value("augmentation", "mask_rate", "0.15")),
         seed=SEED,
-        batch_size=128,
+        batch_size=get_int("augmentation", "mask_batch_size", 128),
         device_index=GPU_ID,
     )
 

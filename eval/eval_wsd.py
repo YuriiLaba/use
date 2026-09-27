@@ -6,14 +6,14 @@ from services.utils_results import results_reports
 from services.utils_data import read_homonym_benchmark
 from services.word_sense_detector import WordSenseDetector
 from services.prediction_strategies import PredictionStrategy
-from services.config import PATH_TO_SOURCE_UDPIPE, HOMONYM_BENCHMARK_PATH
+from services.config import PATH_TO_SOURCE_UDPIPE, HOMONYM_BENCHMARK_PATH, get_value
 from services.utils_results import prediction_accuracy
 
 import torch
 from transformers import AutoTokenizer, AutoModel
 
 
-DEVICE = "cuda"  # or "cpu"
+DEVICE = get_value("evaluation", "device", "cpu")
 
 logging.basicConfig(
     format="%(asctime)s - %(levelname)s - %(message)s",
@@ -82,7 +82,13 @@ if __name__ == "__main__":
     import argparse
 
     parser = argparse.ArgumentParser(description="Evaluate dictionary-sense WSD accuracy.")
-    parser.add_argument("--model-path", default="sentence-transformers/paraphrase-multilingual-mpnet-base-v2 ")
+    parser.add_argument(
+        "--model-path",
+        default=get_value(
+            "models", "base_model",
+            "sentence-transformers/paraphrase-multilingual-mpnet-base-v2",
+        ),
+    )
     parser.add_argument("--tokenizer-path", default=None)
     parser.add_argument("--benchmark-path", default=HOMONYM_BENCHMARK_PATH)
     parser.add_argument("--device", default=DEVICE)

@@ -48,7 +48,8 @@ class TrainingConfig:
     @classmethod
     def from_config(cls, config_path: str) -> "TrainingConfig":
         parser = configparser.ConfigParser()
-        parser.read(config_path)
+        if not parser.read(config_path):
+            raise FileNotFoundError(f"Training configuration not found: {config_path}")
 
         # Initialize instance with default values
         conf = cls()
@@ -61,10 +62,25 @@ class TrainingConfig:
             str: parser.get,
         }
 
-        # Iterate over all defined fields in the dataclass
+        wandb_fields = {
+            "log_to_wandb",
+            "wandb_entity",
+            "wandb_project_name",
+            "wandb_run_name",
+        }
+
+        # Training keys must be read from [training] first. Searching every
+        # section without an order is unsafe because sections such as
+        # [assignment] and [augmentation] also contain ``batch_size``.
         for field in fields(cls):
-            # We search all sections for the key
-            for section in parser.sections():
+            preferred_sections = ["wandb" if field.name in wandb_fields else "training"]
+            sections_to_search = preferred_sections + [
+                section
+                for section in parser.sections()
+                if section not in preferred_sections
+            ]
+
+            for section in sections_to_search:
                 if parser.has_option(section, field.name):
                     # Determine the getter based on the type hint
                     getter = type_getters.get(field.type, parser.get)

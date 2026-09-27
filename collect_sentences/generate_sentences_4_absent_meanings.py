@@ -8,18 +8,22 @@ from typing import Any
 
 from openai import OpenAI
 from tqdm import tqdm
+from services.config import get_int, get_value
 
 
-DEFAULT_INPUT_FILE = (
-    "local_datasets/semi_supervised_2/"
-    "lemmas_with_meanings_and_sentences_mpnet_filtered.json"
+DEFAULT_INPUT_FILE = get_value(
+    "paths", "filtered_grouped",
+    "local_datasets/semi_supervised_2/lemmas_with_meanings_and_sentences_mpnet_filtered.json",
 )
-DEFAULT_OUTPUT_FILE = (
-    "local_datasets/semi_supervised_2/generated_sentences.jsonl"
+DEFAULT_OUTPUT_FILE = get_value(
+    "paths", "generated_sentences",
+    "local_datasets/semi_supervised_2/generated_sentences.jsonl",
 )
-DEFAULT_MIN_SENTENCES = 5
-DEFAULT_MODEL = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
-DEFAULT_SEED = 42
+DEFAULT_MIN_SENTENCES = get_int("generation", "min_sentences", 5)
+DEFAULT_MODEL = os.getenv(
+    "OPENAI_MODEL", get_value("generation", "model", "gpt-4o-mini")
+)
+DEFAULT_SEED = get_int("generation", "seed", 42)
 
 
 GENERATE_PROMPT = """Ти експерт з української мови, зокрема з лексикографії.

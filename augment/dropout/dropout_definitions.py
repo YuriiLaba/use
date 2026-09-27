@@ -8,22 +8,17 @@ from tqdm import tqdm
 from torch.utils.data import DataLoader
 
 from services.udpipe_model import UDPipeModel
-from services.config import PATH_TO_SOURCE_UDPIPE
+from services.config import PATH_TO_SOURCE_UDPIPE, get_int, get_value
 
 from augment.common import TextDataset, ThreadedWriter, set_random_seed
 from augment.dropout.dropouter import Dropouter
 
-INPUT_TEXTS_PATH = (
-    "local_datasets/semi_supervised_2/merged_collected_and_generated_mpnet.json"
-)
-OUTPUT_TEXTS_PATH = (
-    "local_datasets/augmented/dropout/augmented_sentences_definitions.jsonl"
-)
-
-BATCH_SIZE = 256
-NUM_WORKERS = 2
-NUM_AUGMENTATIONS = 4
-SEED = 42
+INPUT_TEXTS_PATH = get_value("augmentation", "input_dataset")
+OUTPUT_TEXTS_PATH = get_value("augmentation", "dropout_definitions_output")
+BATCH_SIZE = get_int("augmentation", "batch_size", 256)
+NUM_WORKERS = get_int("augmentation", "num_workers", 2)
+NUM_AUGMENTATIONS = get_int("augmentation", "num_variants", 4)
+SEED = get_int("augmentation", "seed", 42)
 
 logging.basicConfig(
     level=logging.INFO,

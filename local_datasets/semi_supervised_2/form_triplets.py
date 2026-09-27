@@ -15,7 +15,13 @@ from tqdm import tqdm
 from transformers import AutoTokenizer
 
 from services.udpipe_model import UDPipeModel
-from services.config import PATH_TO_SOURCE_UDPIPE
+from services.config import (
+    PATH_TO_SOURCE_UDPIPE,
+    get_bool,
+    get_int,
+    get_list,
+    get_value,
+)
 from services.utils_embedding_calculation_v2 import (
     _find_target_word_in_sentence,
     _find_target_word_in_tokenized_text,
@@ -28,31 +34,30 @@ logging.basicConfig(
     force=True,
 )
 
-DATASET_PATH = (
-    "local_datasets/semi_supervised_2/merged_collected_and_generated_mpnet.json"
+DATASET_PATH = get_value(
+    "paths", "merged_dataset",
+    "local_datasets/semi_supervised_2/merged_collected_and_generated_mpnet.json",
 )
 OUTPUT_CSV = (
-    "local_datasets/semi_supervised_2/triplets_semi_supervised_all_augs_mixed_100.csv"
+    get_value(
+        "triplets", "default_output",
+        "local_datasets/semi_supervised_2/triplets/triplets_default.csv",
+    )
 )
-TOKENIZER = "sentence-transformers/paraphrase-multilingual-mpnet-base-v2"
-AUGMENTATION_PATHS = (
-    "local_datasets/augmented/token_shuffling/augmented_sentences.jsonl",
-    "local_datasets/augmented/translation/augmented_sentences_translated_v3.jsonl",
-    "local_datasets/augmented/dropout/augmented_sentences.jsonl",
-    "local_datasets/augmented/mask/augmented_sentences.jsonl",
-    # "local_datasets/augmented/all_together/augmented_sentences_3.jsonl",
+TOKENIZER = get_value(
+    "triplets", "tokenizer",
+    "sentence-transformers/paraphrase-multilingual-mpnet-base-v2",
 )
-DEFINITIONS_AUGMENTATION_PATHS = (
-    "local_datasets/augmented/token_shuffling/augmented_sentences_definitions.jsonl",
-    "local_datasets/augmented/translation/augmented_sentences_translated_definitions.jsonl",
-    "local_datasets/augmented/dropout/augmented_sentences_definitions.jsonl",
-    "local_datasets/augmented/mask/augmented_sentences_definitions.jsonl",
-    # "local_datasets/augmented/all_together/augmented_sentences_definitions_3.jsonl",
+AUGMENTATION_PATHS = tuple(get_list("triplets", "context_augmentation_paths"))
+DEFINITIONS_AUGMENTATION_PATHS = tuple(
+    get_list("triplets", "definition_augmentation_paths")
 )
 
-MAX_SENTENCES_PER_MEANING = 100
-USE_AUGMENTED = True
-USE_DEFINITIONS_AUGMENTED = True
+MAX_SENTENCES_PER_MEANING = get_int("triplets", "max_sentences_per_meaning", 100)
+USE_AUGMENTED = get_bool("triplets", "use_augmented", True)
+USE_DEFINITIONS_AUGMENTED = get_bool(
+    "triplets", "use_definitions_augmented", True
+)
 
 SCHEMA = [
     "lemma",
