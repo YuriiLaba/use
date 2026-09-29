@@ -73,6 +73,16 @@ def get_int(
     return load_config(config_path).getint(section, option, fallback=fallback)
 
 
+def get_float(
+    section: str,
+    option: str,
+    fallback: float = 0.0,
+    *,
+    config_path: str | os.PathLike[str] | None = None,
+) -> float:
+    return load_config(config_path).getfloat(section, option, fallback=fallback)
+
+
 def _path(section: str, option: str, fallback: str) -> str:
     return str(get_value(section, option, fallback))
 
