@@ -245,11 +245,13 @@ def upload_to_huggingface(model_dir: Path, repo_id: str, private: bool) -> str:
 
 
 def delete_local_checkpoints(model_dir: Path) -> None:
-    """Delete the final and best checkpoints after a successful upload."""
+    """Delete all local checkpoints after a successful Hugging Face upload."""
     checkpoint_dirs = [model_dir]
     if model_dir.name.endswith("_final"):
-        checkpoint_dirs.append(
-            model_dir.parent / f"{model_dir.name[:-len('_final')]}_best"
+        experiment_stem = model_dir.name[: -len("_final")]
+        checkpoint_dirs.append(model_dir.parent / f"{experiment_stem}_best")
+        checkpoint_dirs.extend(
+            model_dir.parent.glob(f"{experiment_stem}_*_early_stopped")
         )
 
     for checkpoint_dir in checkpoint_dirs:
