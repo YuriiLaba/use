@@ -165,6 +165,60 @@ python -m eval.eval_all_wsd_models \
 
 The root `eval_all_wsd_models.sh` launcher intentionally uses CPU by default for macOS.
 
+Evaluate the eight zero-shot LLMs from the paper on CUDA:
+
+```bash
+./eval_all_llm_wsd_models.sh --device cuda:0
+```
+
+The model list and defaults are in `[llm_evaluation]` in `project_config.ini`.
+The evaluator uses the Ukrainian prompt from Supplementary Methods S2, presents
+all candidate meanings, and evaluates each benchmark sentence separately. It
+runs models sequentially on the selected GPU, using greedy decoding, seed 42,
+and bfloat16 where supported (`--dtype auto`). These are explicit defaults for
+this implementation; the paper does not document all original decoding settings.
+It shows a tqdm progress bar with ETA, running accuracy, and invalid-answer count.
+On CUDA OOM, it reduces the batch size and retries the same examples.
+
+To save disk space, delete each downloaded model after a successful evaluation:
+
+```bash
+./eval_all_llm_wsd_models.sh --device cuda:0 --delete-model-after-evaluation
+```
+
+Cleanup runs after CSV results are saved and model memory is released. It deletes
+only the corresponding Hugging Face model cache entry, including its cached
+revisions and weight files, and logs the expected freed space. Failed/interrupted
+models and explicit local model directories are retained. A later evaluation of
+the same Hugging Face model will download it again.
+
+Artifacts are appended with a unique `run_id`:
+
+- `results/wsd_llm_results.csv`: one summary per model, including accuracy,
+  completion status, duration, settings, and benchmark/prompt hashes.
+- `results/wsd_llm_predictions.csv`: one row per sentence, with candidate meanings,
+  gold/predicted sense numbers, correctness, and the raw model answer.
+- `results/wsd_llm_eval.log`: running logs, progress summaries, and error traces.
+
+Predictions are flushed after every batch and summaries after each model. Invalid
+answers count as incorrect. Failed or interrupted models report accuracy on the
+processed examples only; check `status` and `processed_examples` before comparison.
+The expected answer is a single one-based sense number (an optional trailing
+period or parenthesis is accepted). Answers containing explanations are invalid.
+
+Smoke test one model before the full run:
+
+```bash
+./eval_all_llm_wsd_models.sh \
+  --models Qwen/Qwen3-VL-2B-Instruct \
+  --device cuda:0 --max-examples 20 --batch-size 2
+```
+
+Use `--config PATH`, `--models ID ...`, `--output PATH`, `--predictions-output PATH`,
+or `--log-file PATH` to override defaults. Models download automatically. Use a
+Transformers version supporting Qwen3-VL (`>=4.57.0`) and Accelerate. For gated
+Gemma models, accept the license on Hugging Face and authenticate with `hf auth login`.
+
 ## Collect sentences
 
 The collector is CPU-based. The current implementation starts approximately half of the available CPU count as multiprocessing workers, and each worker may load the large UDPipe model. Use a Linux server with sufficient RAM for full-corpus collection when possible.
