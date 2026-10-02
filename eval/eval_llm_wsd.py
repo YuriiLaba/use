@@ -14,6 +14,8 @@ import hashlib
 import json
 import logging
 import re
+import shutil
+import tempfile
 import time
 import uuid
 from contextlib import contextmanager
@@ -44,8 +46,9 @@ DEFAULT_MODELS = [
     "Qwen/Qwen3-4B-Instruct-2507",
     "Qwen/Qwen3-VL-4B-Instruct",
     "INSAIT-Institute/MamayLM-Gemma-3-12B-IT-v1.0",
-    "google/gemma-3-12b-it",
+    "Qwen/Qwen2.5-14B-Instruct",
     "Qwen/Qwen3-VL-8B-Instruct",
+    "utter-project/EuroLLM-9B-Instruct",
 ]
 DEFAULT_PROMPT = Path(__file__).parent / "prompts/wsd_zero_shot_uk.txt"
 PREDICTION_FIELDS = [
@@ -53,11 +56,8 @@ PREDICTION_FIELDS = [
     "gold_sense", "predicted_sense", "correct", "status", "raw_answer",
 ]
 SUMMARY_FIELDS = [
-    "run_id", "model", "status", "accuracy", "accuracy_percent", "correct",
-    "total_examples", "processed_examples", "invalid_answers", "duration_seconds",
-    "device", "dtype", "batch_size", "max_new_tokens", "max_input_tokens", "seed", "model_revision",
-    "benchmark_path", "benchmark_sha256", "prompt_sha256", "predictions_path",
-    "torch_version", "transformers_version", "error",
+    "run_id", "model", "status", "accuracy_percent", "invalid_answers",
+    "processed_examples", "total_examples", "duration_seconds",
 ]
 
 
@@ -166,6 +166,47 @@ def csv_writer(path: Path, fields: list[str]):
             writer.writeheader()
             handle.flush()
         yield writer, handle
+
+
+def migrate_summary(path: Path, metadata_path: Path) -> None:
+    """Convert the previous wide CSV, preserving its full rows in metadata and a backup."""
+    if not path.exists() or not path.stat().st_size:
+        return
+    with path.open(encoding="utf-8", newline="") as handle:
+        reader = csv.DictReader(handle)
+        if reader.fieldnames == SUMMARY_FIELDS:
+            return
+        if not set(SUMMARY_FIELDS).issubset(reader.fieldnames or []):
+            raise ValueError(f"Existing CSV has an unsupported schema: {path}")
+        rows = list(reader)
+
+    backup = path.with_suffix(path.suffix + ".full_columns.bak")
+    if backup.exists():
+        backup = path.with_suffix(path.suffix + f".{uuid.uuid4().hex[:8]}.full_columns.bak")
+    shutil.copy2(path, backup)
+    metadata_path.parent.mkdir(parents=True, exist_ok=True)
+    with metadata_path.open("a", encoding="utf-8") as handle:
+        for row in rows:
+            handle.write(json.dumps(row, ensure_ascii=False) + "\n")
+        handle.flush()
+
+    # Replace only after the complete compact file has been written.
+    temp_path = None
+    try:
+        with tempfile.NamedTemporaryFile(
+            mode="w", encoding="utf-8", newline="", dir=path.parent, delete=False,
+        ) as handle:
+            temp_path = Path(handle.name)
+            writer = csv.DictWriter(handle, fieldnames=SUMMARY_FIELDS)
+            writer.writeheader()
+            for row in rows:
+                writer.writerow({field: row[field] for field in SUMMARY_FIELDS})
+        temp_path.replace(path)
+    finally:
+        if temp_path is not None and temp_path.exists():
+            temp_path.unlink()
+    LOGGER.info("Converted %d existing summary rows | original backup: %s | metadata: %s",
+                len(rows), backup, metadata_path)
 
 
 def resolve_device(value: str) -> torch.device:
@@ -294,12 +335,16 @@ def evaluate_models(args, examples, template, device, dtype) -> bool:
     any_failed = False
     LOGGER.info("Run %s | models=%d | examples/model=%d | greedy decoding | seed=%d",
                 run_id, len(args.models), len(examples), args.seed)
-    LOGGER.info("Summary CSV: %s | predictions CSV: %s | log: %s",
-                args.output, args.predictions_output, args.log_file)
+    LOGGER.info("Summary CSV: %s | predictions CSV: %s | metadata: %s | log: %s",
+                args.output, args.predictions_output, args.metadata_output, args.log_file)
     LOGGER.info("Delete downloaded models after successful evaluation: %s",
                 args.delete_model_after_evaluation)
+    metadata_path = Path(args.metadata_output)
+    migrate_summary(Path(args.output), metadata_path)
+    metadata_path.parent.mkdir(parents=True, exist_ok=True)
     with csv_writer(Path(args.output), SUMMARY_FIELDS) as (summary_writer, summary_file), \
-            csv_writer(Path(args.predictions_output), PREDICTION_FIELDS) as (prediction_writer, prediction_file):
+            csv_writer(Path(args.predictions_output), PREDICTION_FIELDS) as (prediction_writer, prediction_file), \
+            metadata_path.open("a", encoding="utf-8") as metadata_file:
         for index, model_id in enumerate(args.models, start=1):
             started = time.perf_counter()
             processed = correct = invalid = 0
@@ -369,7 +414,7 @@ def evaluate_models(args, examples, template, device, dtype) -> bool:
             finally:
                 duration = time.perf_counter() - started
                 accuracy = correct / processed if processed else None
-                summary_writer.writerow({
+                metadata = {
                     "run_id": run_id, "model": model_id, "status": status,
                     "accuracy": accuracy, "accuracy_percent": 100 * accuracy if accuracy is not None else None,
                     "correct": correct, "total_examples": len(examples),
@@ -383,7 +428,10 @@ def evaluate_models(args, examples, template, device, dtype) -> bool:
                     "predictions_path": str(args.predictions_output),
                     "torch_version": torch.__version__, "transformers_version": transformers.__version__,
                     "error": error,
-                })
+                }
+                metadata_file.write(json.dumps(metadata, ensure_ascii=False) + "\n")
+                metadata_file.flush()
+                summary_writer.writerow({field: metadata[field] for field in SUMMARY_FIELDS})
                 summary_file.flush()
                 prediction_file.flush()
                 model = tokenizer = None
@@ -432,6 +480,7 @@ def parse_args(argv=None):
     parser.add_argument("--prompt-file", type=Path, default=value("prompt_file", str(DEFAULT_PROMPT)))
     parser.add_argument("--output", type=Path, default=value("output", "results/wsd_llm_results.csv"))
     parser.add_argument("--predictions-output", type=Path, default=value("predictions_output", "results/wsd_llm_predictions.csv"))
+    parser.add_argument("--metadata-output", type=Path, default=value("metadata_output", "results/wsd_llm_metadata.jsonl"))
     parser.add_argument("--log-file", type=Path, default=value("log_file", "results/wsd_llm_eval.log"))
     parser.add_argument(
         "--delete-model-after-evaluation", action="store_true",
@@ -441,9 +490,11 @@ def parse_args(argv=None):
     for option in ("batch_size", "max_new_tokens", "max_input_tokens", "log_every", "max_examples"):
         if getattr(args, option) is not None and getattr(args, option) < 1:
             parser.error(f"--{option.replace('_', '-')} must be positive")
-    paths = [Path(args.output).resolve(), Path(args.predictions_output).resolve(), Path(args.log_file).resolve()]
+    paths = [Path(path).resolve() for path in (
+        args.output, args.predictions_output, args.metadata_output, args.log_file,
+    )]
     if len(set(paths)) != len(paths):
-        parser.error("Summary, predictions, and log paths must be different")
+        parser.error("Summary, predictions, metadata, and log paths must be different")
     return args
 
 

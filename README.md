@@ -198,13 +198,20 @@ the same Hugging Face model will download it again.
 Artifacts are appended with a unique `run_id`:
 
 - `results/wsd_llm_results.csv`: one summary per model, including accuracy,
-  completion status, duration, settings, and benchmark/prompt hashes.
+  completion status, invalid-answer count, example counts, and duration. Columns:
+  `run_id,model,status,accuracy_percent,invalid_answers,processed_examples,total_examples,duration_seconds`.
+- `results/wsd_llm_metadata.jsonl`: detailed records linked by `run_id` and `model`,
+  including settings, model revisions, benchmark/prompt hashes, library versions,
+  exact correct-prediction counts, and errors.
 - `results/wsd_llm_predictions.csv`: one row per sentence, with candidate meanings,
   gold/predicted sense numbers, correctness, and the raw model answer.
 - `results/wsd_llm_eval.log`: running logs, progress summaries, and error traces.
 
-Predictions are flushed after every batch and summaries after each model. Invalid
-answers count as incorrect. Failed or interrupted models report accuracy on the
+Predictions are flushed after every batch; summaries and metadata after each model.
+An existing wide summary CSV is automatically converted to the compact format.
+Its original contents are backed up as `wsd_llm_results.csv.full_columns.bak`,
+and the full historical rows are copied to the metadata file.
+Invalid answers count as incorrect. Failed or interrupted models report accuracy on the
 processed examples only; check `status` and `processed_examples` before comparison.
 The expected answer is a single one-based sense number (an optional trailing
 period or parenthesis is accepted). Answers containing explanations are invalid.
@@ -218,7 +225,7 @@ Smoke test one model before the full run:
 ```
 
 Use `--config PATH`, `--models ID ...`, `--output PATH`, `--predictions-output PATH`,
-or `--log-file PATH` to override defaults. Models download automatically. Use a
+`--metadata-output PATH`, or `--log-file PATH` to override defaults. Models download automatically. Use a
 Transformers version supporting Qwen3-VL (`>=4.57.0`) and Accelerate. For gated
 Gemma models, accept the license on Hugging Face and authenticate with `hf auth login`.
 
