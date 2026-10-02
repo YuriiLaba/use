@@ -308,10 +308,10 @@ done
 
 "$PYTHON" scripts/aggregate_finetuning_results.py \
     --results-dir "$RESULTS_ROOT" \
-    --output results/finetuning_summary.csv
+    --output results/finetuning_summary_aug16.csv
 
 echo
 echo "All fine-tuning experiments completed."
 echo "Local models: $MODEL_ROOT"
 echo "Local metrics: $RESULTS_ROOT"
-echo "Summary: results/finetuning_summary.csv"
+echo "Summary: results/finetuning_summary_aug16.csv"
