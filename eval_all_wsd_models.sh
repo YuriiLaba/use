@@ -8,10 +8,23 @@ BENCHMARK=""
 OUTPUT=""
 DEVICE=""
 DEVICE_SET=0
+DELETE_MODEL_AFTER_EVALUATION=0
 EXTRA_ARGS=()
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
+        --help|-h)
+            cat <<'USAGE'
+Usage: ./eval_all_wsd_models.sh [options]
+
+Options:
+  --config PATH                       Configuration file
+  --device DEVICE                    cpu, cuda, or cuda:0
+  --delete-model-after-evaluation    Delete each successfully evaluated model
+  --help                             Show this help message
+USAGE
+            exit 0
+            ;;
         --config)
             if [[ $# -lt 2 ]]; then
                 echo "Missing value for --config" >&2
@@ -36,6 +49,10 @@ while [[ $# -gt 0 ]]; do
         --device=*)
             DEVICE="${1#*=}"
             DEVICE_SET=1
+            shift
+            ;;
+        --delete-model-after-evaluation)
+            DELETE_MODEL_AFTER_EVALUATION=1
             shift
             ;;
         *)
@@ -67,6 +84,13 @@ fi
 echo "Starting WSD evaluation: $(date)"
 echo "Benchmark: $BENCHMARK"
 echo "Device: $DEVICE"
+
+if [[ "$DELETE_MODEL_AFTER_EVALUATION" -eq 1 ]]; then
+    echo "Model cleanup: enabled after successful evaluation"
+    EXTRA_ARGS+=(--delete-model-after-evaluation)
+else
+    echo "Model cleanup: disabled"
+fi
 
 exec "$PYTHON" -m eval.eval_all_wsd_models \
     --benchmark-path "$BENCHMARK" \

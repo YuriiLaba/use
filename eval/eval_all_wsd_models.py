@@ -12,10 +12,13 @@ in the output CSV and do not stop the remaining evaluations.
 import argparse
 import gc
 import logging
+import os
+import shutil
 import time
 from pathlib import Path
 
 import pandas as pd
+from huggingface_hub import scan_cache_dir
 
 from eval.eval_wsd import evaluate_wsd
 from services.config import HOMONYM_BENCHMARK_PATH, get_list, get_value
@@ -27,7 +30,43 @@ logger = logging.getLogger(__name__)
 MODELS = get_list("baseline_models", "wsd")
 
 
-def evaluate_models(models, benchmark_path, device, output_path):
+def delete_model_artifacts(model_name: str) -> bool:
+    """Delete a local model directory or the matching Hugging Face cache entry."""
+    local_path = Path(model_name)
+    if local_path.exists():
+        if local_path.is_dir():
+            shutil.rmtree(local_path)
+        else:
+            local_path.unlink()
+        logger.info("Deleted local model: %s", local_path)
+        return True
+
+    cache_dir = os.getenv("HF_HUB_CACHE") or os.getenv("HUGGINGFACE_HUB_CACHE")
+    cache_info = scan_cache_dir(cache_dir=cache_dir)
+    matching_revisions = [
+        revision.commit_hash
+        for repo in cache_info.repos
+        if repo.repo_type == "model" and repo.repo_id == model_name
+        for revision in repo.revisions
+    ]
+
+    if not matching_revisions:
+        logger.warning("No cached files found for model: %s", model_name)
+        return False
+
+    strategy = cache_info.delete_revisions(*matching_revisions)
+    logger.info(
+        "Deleting cached model: %s | expected freed space: %s",
+        model_name,
+        strategy.expected_freed_size_str,
+    )
+    strategy.execute()
+    return True
+
+
+def evaluate_models(
+    models, benchmark_path, device, output_path, delete_after_evaluation=False
+):
     results = []
     evaluation_started = time.perf_counter()
 
@@ -46,6 +85,7 @@ def evaluate_models(models, benchmark_path, device, output_path):
             "status": "failed",
             "duration_seconds": None,
             "error": None,
+            "deleted_after_evaluation": False,
         }
 
         try:
@@ -87,6 +127,16 @@ def evaluate_models(models, benchmark_path, device, output_path):
 
             # Release references and reduce memory pressure between models.
             gc.collect()
+
+            if delete_after_evaluation and result["status"] == "ok":
+                try:
+                    result["deleted_after_evaluation"] = delete_model_artifacts(model_name)
+                except Exception:
+                    logger.exception("Could not delete model artifacts: %s", model_name)
+            elif delete_after_evaluation:
+                logger.warning(
+                    "Keeping model because evaluation failed: %s", model_name
+                )
 
     result_df = pd.DataFrame(results).sort_values(
         by=["status", "accuracy"],
@@ -140,6 +190,11 @@ def main():
         default=get_value("evaluation", "wsd_output", "wsd_model_results.csv"),
         help="Output CSV path.",
     )
+    parser.add_argument(
+        "--delete-model-after-evaluation",
+        action="store_true",
+        help="Delete the local model directory or Hugging Face cache entry after successful evaluation.",
+    )
     args = parser.parse_args()
 
     benchmark_path = Path(args.benchmark_path)
@@ -151,6 +206,7 @@ def main():
         benchmark_path=str(benchmark_path),
         device=args.device,
         output_path=args.output,
+        delete_after_evaluation=args.delete_model_after_evaluation,
     )
 
 

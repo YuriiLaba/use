@@ -144,6 +144,16 @@ wsd_model_results.csv
 
 The batch evaluator runs on CPU by default and continues if an individual model fails.
 
+To delete each successfully evaluated model from the local Hugging Face cache and
+save disk space, use:
+
+```bash
+./eval_all_wsd_models.sh --delete-model-after-evaluation
+```
+
+Failed evaluations are retained so they can be diagnosed and rerun. Explicit local
+model directories passed through `--models` are also deleted after successful evaluation.
+
 To use a CUDA GPU on a Linux server, call the Python evaluator directly:
 
 ```bash
