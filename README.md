@@ -179,6 +179,9 @@ and bfloat16 where supported (`--dtype auto`). These are explicit defaults for
 this implementation; the paper does not document all original decoding settings.
 It shows a tqdm progress bar with ETA, running accuracy, and invalid-answer count.
 On CUDA OOM, it reduces the batch size and retries the same examples.
+WSD uses text inputs only: the evaluator loads the tokenizer and the model's
+original chat template directly, without constructing an image/video processor.
+Legacy `chat_template.json` files are supported alongside tokenizer chat templates.
 
 To save disk space, delete each downloaded model after a successful evaluation:
 

@@ -23,13 +23,12 @@ from pathlib import Path
 
 import torch
 import transformers
-from huggingface_hub import scan_cache_dir
+from huggingface_hub import hf_hub_download, scan_cache_dir
 from tqdm.auto import tqdm
 from transformers import (
     AutoConfig,
     AutoModelForCausalLM,
     AutoModelForImageTextToText,
-    AutoProcessor,
     AutoTokenizer,
     set_seed,
 )
@@ -195,17 +194,35 @@ def resolve_dtype(value: str, device: torch.device):
     return getattr(torch, value)
 
 
+def load_text_tokenizer(model_id: str):
+    """Load the model's text tokenizer and original chat template without image processors."""
+    tokenizer = AutoTokenizer.from_pretrained(model_id)
+    if not tokenizer.chat_template:
+        # Some multimodal repos (including Qwen3-VL) store their template in the
+        # legacy processor JSON rather than tokenizer_config.json or a Jinja file.
+        # Read that template directly instead of constructing AutoProcessor.
+        model_path = Path(model_id)
+        if model_path.is_dir():
+            template_path = model_path / "chat_template.json"
+        else:
+            template_path = Path(hf_hub_download(model_id, filename="chat_template.json"))
+        template = json.loads(template_path.read_text(encoding="utf-8")).get("chat_template")
+        if not isinstance(template, (str, dict)) or not template:
+            raise ValueError(f"No valid chat template in {template_path}")
+        tokenizer.chat_template = template
+        LOGGER.info("Loaded text chat template from %s", template_path)
+    tokenizer.get_chat_template()  # Fail before loading weights if no default template is usable.
+    return tokenizer
+
+
 def load_model(model_id: str, device: torch.device, dtype):
     config = AutoConfig.from_pretrained(model_id)
     # Lapa and both MamayLM models are Gemma 3 multimodal architectures too.
     if config.model_type in {"qwen3_vl", "gemma3"}:
         model_class = AutoModelForImageTextToText
-        formatter = AutoProcessor.from_pretrained(model_id)
-        tokenizer = formatter.tokenizer
     else:
         model_class = AutoModelForCausalLM
-        tokenizer = AutoTokenizer.from_pretrained(model_id)
-        formatter = tokenizer
+    tokenizer = load_text_tokenizer(model_id)
     tokenizer.padding_side = "left"
     if tokenizer.pad_token_id is None:
         if tokenizer.eos_token_id is None:
@@ -217,15 +234,14 @@ def load_model(model_id: str, device: torch.device, dtype):
         model_id, config=config, dtype=dtype, device_map={"": str(device)},
         attn_implementation="sdpa",
     ).eval()
-    return model, tokenizer, formatter
+    return model, tokenizer
 
 
-def generate_answers(model, tokenizer, formatter, prompts, device, max_new_tokens, max_input_tokens):
+def generate_answers(model, tokenizer, prompts, device, max_new_tokens, max_input_tokens):
     rendered = []
     for prompt in prompts:
-        content = prompt if formatter is tokenizer else [{"type": "text", "text": prompt}]
-        rendered.append(formatter.apply_chat_template(
-            [{"role": "user", "content": content}], tokenize=False, add_generation_prompt=True,
+        rendered.append(tokenizer.apply_chat_template(
+            [{"role": "user", "content": prompt}], tokenize=False, add_generation_prompt=True,
         ))
     inputs = tokenizer(rendered, padding=True, add_special_tokens=False, return_tensors="pt")
     input_length = inputs["input_ids"].shape[1]
@@ -287,7 +303,7 @@ def evaluate_models(args, examples, template, device, dtype) -> bool:
         for index, model_id in enumerate(args.models, start=1):
             started = time.perf_counter()
             processed = correct = invalid = 0
-            model = tokenizer = formatter = None
+            model = tokenizer = None
             status, error, revision = "failed", "", ""
             batch_size = args.batch_size
             interrupted = False
@@ -295,7 +311,7 @@ def evaluate_models(args, examples, template, device, dtype) -> bool:
                         index, len(args.models), model_id, len(args.models) - index)
             try:
                 set_seed(args.seed)
-                model, tokenizer, formatter = load_model(model_id, device, dtype)
+                model, tokenizer = load_model(model_id, device, dtype)
                 revision = getattr(model.config, "_commit_hash", "") or ""
                 with tqdm(total=len(examples), desc=f"[{index}/{len(args.models)}] {model_id}",
                           unit="example", dynamic_ncols=True) as progress:
@@ -304,7 +320,7 @@ def evaluate_models(args, examples, template, device, dtype) -> bool:
                         prompts = [build_prompt(example, template) for example in batch]
                         try:
                             answers = generate_answers(
-                                model, tokenizer, formatter, prompts, device,
+                                model, tokenizer, prompts, device,
                                 args.max_new_tokens, args.max_input_tokens,
                             )
                         except torch.cuda.OutOfMemoryError:
@@ -370,7 +386,7 @@ def evaluate_models(args, examples, template, device, dtype) -> bool:
                 })
                 summary_file.flush()
                 prediction_file.flush()
-                model = tokenizer = formatter = None
+                model = tokenizer = None
                 gc.collect()
                 if device.type == "cuda":
                     torch.cuda.empty_cache()
