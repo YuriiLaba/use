@@ -43,7 +43,10 @@ def evaluate_wsd(
     benchmark_path: str = HOMONYM_BENCHMARK_PATH,
     device: str = DEVICE,
     anchor_pooling: str = "target",
+    return_predictions: bool = False,
+    model_revision: str | None = None,
 ):
+    """Return accuracy, or the same per-sense predictions for further analysis."""
     if anchor_pooling not in ("sentence", "target"):
         raise ValueError("anchor_pooling must be 'sentence' or 'target'")
     if model_tokenizer_path is None:
@@ -53,11 +56,12 @@ def evaluate_wsd(
     data = read_homonym_benchmark(benchmark_path)
 
     logger.info("Loading fine-tuned model...")
+    revision_kwargs = {"revision": model_revision} if model_revision else {}
     tokenizer = AutoTokenizer.from_pretrained(
-        model_tokenizer_path, trust_remote_code=True
+        model_tokenizer_path, trust_remote_code=True, **revision_kwargs
     )
     model = AutoModel.from_pretrained(
-        model_path, output_hidden_states=True, trust_remote_code=True
+        model_path, output_hidden_states=True, trust_remote_code=True, **revision_kwargs
     )
     model = model.to(device).eval()
 
@@ -88,6 +92,8 @@ def evaluate_wsd(
     if verbose:
         results_reports(evaluation_dataset_pd, udpipe_model)
 
+    if return_predictions:
+        return evaluation_dataset_pd
     return prediction_accuracy(evaluation_dataset_pd)
 
 

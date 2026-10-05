@@ -171,6 +171,48 @@ done
 These commands keep downloaded models cached between pooling modes and save
 separate CSVs, without overwriting `wsd_model_results.csv`.
 
+### WSD accuracy by natural sense availability
+
+Analyze Natural, Natural + Generation, and Natural + Generation + Back-translation
+across both training PT settings and the three configured training seeds:
+
+```bash
+./eval_wsd_by_sense_availability.sh --plan-only
+./eval_wsd_by_sense_availability.sh --device cuda:0 --resume
+```
+
+This runs WSD only (18 checkpoints by default), with the existing
+maximum-over-examples strategy and target-token inference for every checkpoint.
+It does not retrain, run STS/MTEB, or change/upload the original experiment results.
+Final checkpoints are loaded locally when available, otherwise from their recorded
+Hugging Face URLs (or the configured repository prefix). Downloads remain cached.
+
+The `[bucket_analysis]` configuration selects conditions, training poolings, and
+output directory. Seeds come from `[experiments]`. Override these with
+`--conditions`, `--training-poolings`, `--seeds`, or `--output-dir`.
+Buckets `0`, `1-4`, `5-19`, and `>=20` count unique natural sentences per exact
+lemma/definition in `[paths] filtered_grouped`, after benchmark-overlap filtering
+and before generation or transformations. Missing definitions raise an error;
+they are not silently counted as zero.
+
+Outputs in `results/wsd_sense_availability/`:
+
+- `bucket_tables.tex`: one paper table per training pooling, without a count column.
+- `bucket_summary.csv`: mean accuracy and sample standard deviation over training seeds.
+- `bucket_gains.csv`: paired generation gains and additional transformation gains.
+- `predictions/`: complete per-record predictions and checkpoint provenance for each run.
+- `per_run_bucket_metrics.csv`, `bucket_details.json`, and `bucket_membership.json`:
+  supporting counts, exclusions, and per-seed scores.
+- `manifest.json`, `failures.json`, and `run.log`: reproducibility and execution details.
+
+All bucket comparisons use the same intersection of successfully scored records
+across the requested checkpoints. Original overall accuracy is also recorded for
+comparison with existing metrics; common-record bucket scores need not aggregate
+to that original score if exclusions differ. Completed predictions can be reused
+with `--resume` only when input hashes, checkpoint fingerprint/revision, inference
+code, device, and recorded dependency versions still match. Model failures do not
+erase completed predictions; fix the error and resume. No partial table is generated.
+
 To delete each successfully evaluated model from the local Hugging Face cache and
 save disk space, use:
 
