@@ -23,6 +23,7 @@ datasets_pre_defined/*
 
 # environments
 venv/
+.env
 .env/
 .venv/
 

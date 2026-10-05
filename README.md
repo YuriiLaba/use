@@ -31,6 +31,8 @@ python -m pip install -r requirements-notebooks.txt
 python -m spacy download uk_core_news_sm
 ```
 
+For OpenAI sentence generation, copy `.env.example` to `.env` in the repository root and set `OPENAI_API_KEY`. Generation loads this file automatically without overriding exported environment variables. Keep the model, minimum example count, and seed in `[generation]` in `project_config.ini`; `--model` and `OPENAI_MODEL` can override the configured model. The `.env` file is ignored by Git; never commit credentials. Other entry points, including the pseudo-label audit, may still require credentials exported in the terminal.
+
 If UDPipe is not available from the package index, install the local source archive:
 
 ```bash
@@ -143,6 +145,31 @@ wsd_model_results.csv
 ```
 
 The batch evaluator runs on CPU by default and continues if an individual model fails.
+
+WSD inference uses target-token pooling for benchmark sentences by default.
+Use `--anchor-pooling sentence` for full-sentence pooling; dictionary definitions
+always use full-sentence mean pooling. This inference option is independent of
+the training `pool_targets` setting. The CSV records the selected `anchor_pooling`.
+The existing accuracy calculation excludes rows with missing predictions.
+Target-token extraction can fail while sentence pooling does not require it,
+so the scored rows can differ between modes; total, scored, and excluded
+dictionary-sense row counts are logged for each evaluation.
+
+Evaluate the two MPNet baselines with both inference pooling modes on the server:
+
+```bash
+for pooling in sentence target; do
+  ./eval_all_wsd_models.sh \
+    --device cuda:0 \
+    --anchor-pooling "$pooling" \
+    --models sentence-transformers/paraphrase-multilingual-mpnet-base-v2 \
+             lang-uk/ukr-paraphrase-multilingual-mpnet-base \
+    --output "results/wsd_baselines_${pooling}.csv" || break
+done
+```
+
+These commands keep downloaded models cached between pooling modes and save
+separate CSVs, without overwriting `wsd_model_results.csv`.
 
 To delete each successfully evaluated model from the local Hugging Face cache and
 save disk space, use:

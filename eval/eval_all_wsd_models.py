@@ -65,14 +65,18 @@ def delete_model_artifacts(model_name: str) -> bool:
 
 
 def evaluate_models(
-    models, benchmark_path, device, output_path, delete_after_evaluation=False
+    models, benchmark_path, device, output_path, delete_after_evaluation=False,
+    anchor_pooling="target",
 ):
+    if anchor_pooling not in ("sentence", "target"):
+        raise ValueError("anchor_pooling must be 'sentence' or 'target'")
     results = []
     evaluation_started = time.perf_counter()
 
     logger.info("Starting WSD benchmark evaluation")
     logger.info("Benchmark: %s", benchmark_path)
     logger.info("Device: %s", device)
+    logger.info("Anchor pooling: %s", anchor_pooling)
     logger.info("Models to evaluate: %d", len(models))
 
     for index, model_name in enumerate(models, start=1):
@@ -81,6 +85,7 @@ def evaluate_models(
 
         result = {
             "model": model_name,
+            "anchor_pooling": anchor_pooling,
             "accuracy": None,
             "status": "failed",
             "duration_seconds": None,
@@ -95,6 +100,7 @@ def evaluate_models(
                 verbose=False,
                 benchmark_path=benchmark_path,
                 device=device,
+                anchor_pooling=anchor_pooling,
             )
             result["accuracy"] = float(accuracy)
             result["status"] = "ok"
@@ -143,6 +149,7 @@ def evaluate_models(
         ascending=[True, False],
         na_position="last",
     )
+    Path(output_path).parent.mkdir(parents=True, exist_ok=True)
     result_df.to_csv(output_path, index=False)
     total_duration = time.perf_counter() - evaluation_started
     logger.info("Saved results to %s", output_path)
@@ -191,6 +198,10 @@ def main():
         help="Output CSV path.",
     )
     parser.add_argument(
+        "--anchor-pooling", choices=("sentence", "target"), default="target",
+        help="Pooling for benchmark sentences; definitions always use full-sentence mean pooling. Default: target.",
+    )
+    parser.add_argument(
         "--delete-model-after-evaluation",
         action="store_true",
         help="Delete the local model directory or Hugging Face cache entry after successful evaluation.",
@@ -207,6 +218,7 @@ def main():
         device=args.device,
         output_path=args.output,
         delete_after_evaluation=args.delete_model_after_evaluation,
+        anchor_pooling=args.anchor_pooling,
     )
 
 

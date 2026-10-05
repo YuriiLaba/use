@@ -4,11 +4,16 @@ import argparse
 import json
 import os
 import re
+from pathlib import Path
 from typing import Any
 
+from dotenv import load_dotenv
 from openai import OpenAI
 from tqdm import tqdm
 from services.config import get_int, get_value
+
+
+load_dotenv(Path(__file__).resolve().parents[1] / ".env", override=False)
 
 
 DEFAULT_INPUT_FILE = get_value(
@@ -141,7 +146,8 @@ def main() -> None:
 
     if not os.getenv("OPENAI_API_KEY"):
         raise RuntimeError(
-            "OPENAI_API_KEY is not set. Export it before running this script."
+            "OPENAI_API_KEY is not set. Add it to the project's .env file "
+            "or export it before running this script."
         )
 
     client = OpenAI()

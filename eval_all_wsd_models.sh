@@ -20,6 +20,9 @@ Usage: ./eval_all_wsd_models.sh [options]
 Options:
   --config PATH                       Configuration file
   --device DEVICE                    cpu, cuda, or cuda:0
+  --anchor-pooling sentence|target    Inference pooling (default: target)
+  --models MODEL [MODEL ...]          Evaluate only the selected models
+  --output PATH                      Override the output CSV
   --delete-model-after-evaluation    Delete each successfully evaluated model
   --help                             Show this help message
 USAGE

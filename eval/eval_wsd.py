@@ -1,4 +1,5 @@
 import logging
+from functools import partial
 
 from services.poolings import PoolingStrategy
 from services.udpipe_model import UDPipeModel
@@ -41,7 +42,10 @@ def evaluate_wsd(
     verbose: bool = True,
     benchmark_path: str = HOMONYM_BENCHMARK_PATH,
     device: str = DEVICE,
+    anchor_pooling: str = "target",
 ):
+    if anchor_pooling not in ("sentence", "target"):
+        raise ValueError("anchor_pooling must be 'sentence' or 'target'")
     if model_tokenizer_path is None:
         model_tokenizer_path = model_path
 
@@ -60,17 +64,26 @@ def evaluate_wsd(
     logger.info("Loading UDPipe model...")
     udpipe_model = UDPipeModel(PATH_TO_SOURCE_UDPIPE)
 
-    logger.info("Running Word Sense Detection...")
+    logger.info("Running Word Sense Detection | anchor pooling: %s", anchor_pooling)
     word_sense_detector = WordSenseDetector(
         pretrained_model=model,
         tokenizer=tokenizer,
         udpipe_model=udpipe_model,
         evaluation_dataset=data,
         pooling_strategy=PoolingStrategy.mean_pooling,
-        prediction_strategy=PredictionStrategy.max_sim_across_all_examples,
+        prediction_strategy=partial(
+            PredictionStrategy.max_sim_across_all_examples,
+            anchor_pooling=anchor_pooling,
+        ),
         device=torch.device(device),
     )
     evaluation_dataset_pd = word_sense_detector.run()
+    scored_rows = len(evaluation_dataset_pd.dropna())
+    logger.info(
+        "Dictionary-sense rows | total=%d | scored=%d | excluded=%d",
+        len(evaluation_dataset_pd), scored_rows,
+        len(evaluation_dataset_pd) - scored_rows,
+    )
 
     if verbose:
         results_reports(evaluation_dataset_pd, udpipe_model)
@@ -93,6 +106,10 @@ if __name__ == "__main__":
     parser.add_argument("--benchmark-path", default=HOMONYM_BENCHMARK_PATH)
     parser.add_argument("--device", default=DEVICE)
     parser.add_argument(
+        "--anchor-pooling", choices=("sentence", "target"), default="target",
+        help="Pooling for benchmark sentences; definitions always use full-sentence mean pooling. Default: target.",
+    )
+    parser.add_argument(
         "--no-reports",
         action="store_true",
         help="Skip POS/gloss reports and badly_predicted.csv; still print accuracy.",
@@ -104,5 +121,6 @@ if __name__ == "__main__":
         verbose=not args.no_reports,
         benchmark_path=args.benchmark_path,
         device=args.device,
+        anchor_pooling=args.anchor_pooling,
     )
     print(f"WSD accuracy (retained dictionary-sense rows): {accuracy:.6f}")

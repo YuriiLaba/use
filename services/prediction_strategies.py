@@ -9,6 +9,21 @@ from services.utils_embedding_calculation_v2 import (
 )
 
 
+def _get_example_embedding(
+    model, tokenizer, udpipe_model, pooling_strategy, lemma, example, device,
+    anchor_pooling,
+):
+    if anchor_pooling == "sentence":
+        return get_context_embedding(
+            model, tokenizer, pooling_strategy, example, device
+        )
+    if anchor_pooling == "target":
+        return get_target_word_embedding(
+            model, tokenizer, udpipe_model, pooling_strategy, lemma, example, device
+        )
+    raise ValueError("anchor_pooling must be 'sentence' or 'target'")
+
+
 class PredictionStrategy:
     @staticmethod
     def all_examples_to_one_embedding(
@@ -21,14 +36,16 @@ class PredictionStrategy:
         pooling_strategy,
         device,
         context_embedding_cache=None,
+        anchor_pooling="target",
     ):
         # TODO: check whether it's more efficient to create numpy here
         max_sim = -1
         correct_context = None
 
         combined_embedding = [
-            get_target_word_embedding(
-                model, tokenizer, udpipe_model, pooling_strategy, lemma, example, device
+            _get_example_embedding(
+                model, tokenizer, udpipe_model, pooling_strategy, lemma, example,
+                device, anchor_pooling,
             )
             for example in examples
         ]
@@ -82,13 +99,15 @@ class PredictionStrategy:
         pooling_strategy,
         device,
         context_embedding_cache=None,
+        anchor_pooling="target",
     ):
         max_sim = -1
         correct_context = None
 
         target_word_embeddings = [
-            get_target_word_embedding(
-                model, tokenizer, udpipe_model, pooling_strategy, lemma, example, device
+            _get_example_embedding(
+                model, tokenizer, udpipe_model, pooling_strategy, lemma, example,
+                device, anchor_pooling,
             )
             for example in examples
         ]
