@@ -187,6 +187,20 @@ It does not retrain, run STS/MTEB, or change/upload the original experiment resu
 Final checkpoints are loaded locally when available, otherwise from their recorded
 Hugging Face URLs (or the configured repository prefix). Downloads remain cached.
 
+To free disk space after each checkpoint:
+
+```bash
+./eval_wsd_by_sense_availability.sh --device cuda:0 --resume --delete-model-after-evaluation
+```
+
+This deletes only the evaluated Hugging Face cache revision after predictions are
+saved (including already cached copies). Local training checkpoints, other model
+repositories, and other revisions are retained. Verified resumed runs can also
+clean up their cached revision without repeating inference. Failed evaluations
+are not cleaned up; cleanup errors are logged without invalidating saved results.
+Do not use this option while another process needs the same cached checkpoint.
+No models or results are deleted from Hugging Face itself.
+
 The `[bucket_analysis]` configuration selects conditions, training poolings, and
 output directory. Seeds come from `[experiments]`. Override these with
 `--conditions`, `--training-poolings`, `--seeds`, or `--output-dir`.

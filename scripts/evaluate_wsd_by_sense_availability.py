@@ -16,6 +16,7 @@ import logging
 import math
 import os
 import statistics
+from dataclasses import replace
 from importlib.metadata import version
 from pathlib import Path
 from urllib.parse import urlparse
@@ -172,6 +173,28 @@ def pin_source(source: dict) -> dict:
     return source
 
 
+def delete_cached_checkpoint(source: dict) -> bool:
+    """Remove only the evaluated Hub revision; never delete local checkpoints."""
+    if source["kind"] != "huggingface":
+        LOGGER.info("Keeping local checkpoint: %s", source["model_path"])
+        return False
+    from huggingface_hub import scan_cache_dir
+    cache = scan_cache_dir()
+    repos = frozenset(repo for repo in cache.repos
+                      if repo.repo_type == "model" and repo.repo_id == source["model_path"])
+    revision = source["revision"]
+    if not any(r.commit_hash == revision for repo in repos for r in repo.revisions):
+        LOGGER.info("No cached evaluated revision found: %s @ %s", source["model_path"], revision)
+        return False
+    # Mirrored repositories can share commit hashes. Scope deletion to this repo.
+    strategy = replace(cache, repos=repos).delete_revisions(revision)
+    LOGGER.info("Deleting cached checkpoint: %s @ %s | expected freed space: %s",
+                source["model_path"], revision, strategy.expected_freed_size_str)
+    strategy.execute()
+    LOGGER.info("Deleted cached checkpoint: %s @ %s", source["model_path"], revision)
+    return True
+
+
 def summarize(runs: list[dict], records: list[dict], conditions, poolings, seeds):
     """Use the intersection of valid predictions across ALL requested runs."""
     expected = {(c, p, s) for c in conditions for p in poolings for s in seeds}
@@ -275,6 +298,8 @@ def parse_args(argv=None):
     parser.add_argument("--seeds", nargs="+", type=int)
     parser.add_argument("--training-poolings", nargs="+", choices=("false", "true"))
     parser.add_argument("--resume", action="store_true", help="Reuse verified predictions for unchanged inputs/checkpoints")
+    parser.add_argument("--delete-model-after-evaluation", action="store_true",
+                        help="Delete the evaluated Hugging Face cache revision after saving predictions; keep local checkpoints")
     parser.add_argument("--plan-only", action="store_true", help="List checkpoints without downloading or running models")
     args = parser.parse_args(argv)
     config_path = Path(args.config).resolve()
@@ -360,6 +385,7 @@ def main(argv=None) -> None:
     for index, run in enumerate(tqdm(plan, desc="Checkpoints", unit="model"), start=1):
         name = run["experiment"]
         path = output / "predictions" / f"{name}.json"
+        cleanup_source = None
         LOGGER.info("[%d/%d] %s | inference pooling=target", index, len(plan), name)
         try:
             manifest = {**identity, "source": pin_source(run["source"]),
@@ -403,6 +429,8 @@ def main(argv=None) -> None:
             ] or len(saved["predictions"]) != len(records):
                 raise ValueError(f"Cached prediction membership mismatch: {name}")
             completed.append(saved)
+            if args.delete_model_after_evaluation:
+                cleanup_source = manifest["source"]
         except Exception as error:
             LOGGER.exception("Failed checkpoint %s", name)
             failures.append({"experiment": name, "error": f"{type(error).__name__}: {error}"})
@@ -410,6 +438,11 @@ def main(argv=None) -> None:
             gc.collect()
             if args.device.startswith("cuda"):
                 torch.cuda.empty_cache()
+            if cleanup_source is not None:
+                try:
+                    delete_cached_checkpoint(cleanup_source)
+                except Exception:
+                    LOGGER.exception("Cache cleanup failed for %s; saved predictions remain valid", name)
     write_json(output / "failures.json", failures)
     if failures:
         raise RuntimeError(f"{len(failures)} runs failed. Fix errors and rerun with --resume; no partial table generated.")
