@@ -1,0 +1,31 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite it using the metadata below."
+
+title: "Improving Ukrainian Word Sense Disambiguation with Sense-Aware Sentence Embeddings"
+
+type: software
+
+authors:
+  - family-names: "Muryn"
+    given-names: "Victor"
+  - family-names: "Laba"
+    given-names: "Yurii"
+
+version: "1.0.0"
+date-released: "2026-10-07"
+
+repository-code: "https://github.com/YuriiLaba/use"
+
+abstract: >
+  Research code accompanying the manuscript "Improving Ukrainian Word
+  Sense Disambiguation with Sense-Aware Sentence Embeddings". The repository
+  contains code for corpus collection, definition-based pseudo-labeling,
+  data augmentation, contrastive fine-tuning, and evaluation on Ukrainian
+  word sense disambiguation and general sentence-embedding tasks.
+
+keywords:
+  - natural language processing
+  - word sense disambiguation
+  - machine learning
+  - sentence embeddings
+  - low-resource languages
