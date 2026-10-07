@@ -209,9 +209,3 @@ Related resources:
 - Laba, Y. (2026). *Ukrainian WSD Benchmark*. [doi:10.57967/hf/10571](https://doi.org/10.57967/hf/10571).
 - Chaplynskyi, D. (2023). [Introducing UberText 2.0: A Corpus of Modern Ukrainian at Scale](https://aclanthology.org/2023.unlp-1.1/). UNLP, pp. 1-10.
 - Laba, Y., Mudryi, V., Chaplynskyi, D., Romanyshyn, M., and Dobosevych, O. (2023). [Contextual Embeddings for Ukrainian: A Large Language Model Approach to Word Sense Disambiguation](https://aclanthology.org/2023.unlp-1.2/). UNLP, pp. 11-19.
-
-## License & Contribution Guidelines
-
-No code license is currently declared in this repository. Datasets and pretrained models retain their respective licenses.
-
-Report bugs through issues, including the command, configuration, and error output. Contributions can be submitted as pull requests with a short description of the change and how it was checked.
