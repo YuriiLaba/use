@@ -46,3 +46,6 @@ logs/
 
 # paper files
 paper/*
+
+results/*
+connect_server.sh
