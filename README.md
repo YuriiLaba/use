@@ -8,11 +8,10 @@ Research code accompanying the manuscript by Victor Muryn and Yurii Laba. The pr
 
 - **Ukrainian WSD Benchmark:** 1,386 lemmas, 3,206 dictionary meanings, and 13,310 contextual examples. Definitions come from the Dictionary of Noun Homonyms in Contemporary Ukrainian; examples come from GRAC. Each JSONL record contains `lemma` (string), `gloss` (list of definitions), and `examples` (list of sentences). The benchmark is available at [doi:10.57967/hf/10571](https://doi.org/10.57967/hf/10571).
 - **Training corpus:** the news, fiction, and Wikipedia sentence-level subsets of [UberText 2.0](https://lang.org.ua/en/ubertext/), using the compressed `filter_rus_gcld+short.text_only.txt.bz2` files.
+- **Ukrainian UDPipe model:** `20180506.uk.mova-institute.udpipe`, archived on [Zenodo](https://doi.org/10.5281/zenodo.23205856), used for tokenization and lemmatization during lemma-based corpus retrieval.
 - **Sentence-embedding evaluation:** [STS-UK](https://huggingface.co/datasets/anikol12/STSB-UK) and Ukrainian classification, clustering, bitext mining, and retrieval tasks from [MTEB](https://github.com/embeddings-benchmark/mteb).
 
 The benchmark definitions supply the sense inventory for training; its example sentences are reserved for evaluation. Intermediate datasets are stored as JSON/JSONL, and training triplets as CSV with context, positive definition, negative definition, lemma, group ID, and target-token indices.
-
-Datasets, generated outputs, and model weights are excluded from Git and must be obtained or generated separately.
 
 ## Code Information
 
@@ -47,7 +46,7 @@ datasets_pre_defined/ukrainian_wsd_benchmark.jsonl
 models/20180506.uk.mova-institute.udpipe
 ```
 
-The UDPipe model file is separate from the `ufal.udpipe` Python package. For corpus collection, also download the three UberText subsets listed above into `datasets_pre_defined/`. Their expected filenames are in `[collection]` in `project_config.ini`.
+For corpus collection, also download the three UberText subsets listed above into `datasets_pre_defined/`. Their expected filenames are in `[collection]` in `project_config.ini`.
 
 Create the target-lemma list from the benchmark:
 
