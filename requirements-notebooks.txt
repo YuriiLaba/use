@@ -1,4 +1,0 @@
-# Optional tools for the committed exploratory notebooks; versions not recorded.
--r requirements.txt
-matplotlib
-jupyterlab
