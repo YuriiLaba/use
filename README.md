@@ -1,336 +1,80 @@
-# Ukrainian Word Sense Disambiguation
+# Improving Ukrainian Word Sense Disambiguation with Sense-Aware Sentence Embeddings
 
-Research code for Ukrainian word-sense disambiguation using multilingual transformer models, Ukrainian dictionary senses, contextual examples, and contrastive fine-tuning.
+## Description
 
-## Requirements
+Research code accompanying the manuscript by Victor Muryn and Yurii Laba. The project adapts a multilingual sentence encoder for Ukrainian word sense disambiguation (WSD): selecting the dictionary meaning of an ambiguous word in context. It includes corpus collection, definition-based pseudo-labeling, data augmentation, contrastive fine-tuning, and evaluation on WSD and general sentence-embedding tasks.
 
-- Python 3.10 or 3.11
-- macOS or Linux
-- 8 GB+ RAM for basic evaluation; more for collection and training
-- Optional GPU for embedding, augmentation, and training workloads
+## Dataset Information
 
-The dependency versions are currently not pinned.
+- **Ukrainian WSD Benchmark:** 1,386 lemmas, 3,206 dictionary meanings, and 13,310 contextual examples. Definitions come from the Dictionary of Noun Homonyms in Contemporary Ukrainian; examples come from GRAC. Each JSONL record contains `lemma` (string), `gloss` (list of definitions), and `examples` (list of sentences). The benchmark is available at [doi:10.57967/hf/10571](https://doi.org/10.57967/hf/10571).
+- **Training corpus:** the news, fiction, and Wikipedia sentence-level subsets of [UberText 2.0](https://lang.org.ua/en/ubertext/), using the compressed `filter_rus_gcld+short.text_only.txt.bz2` files.
+- **Sentence-embedding evaluation:** [STS-UK](https://huggingface.co/datasets/anikol12/STSB-UK) and Ukrainian classification, clustering, bitext mining, and retrieval tasks from [MTEB](https://github.com/embeddings-benchmark/mteb).
 
-## Central configuration
+The benchmark definitions supply the sense inventory for training; its example sentences are reserved for evaluation. Intermediate datasets are stored as JSON/JSONL, and training triplets as CSV with context, positive definition, negative definition, lemma, group ID, and target-token indices.
 
-The active pipeline uses [`project_config.ini`](project_config.ini) as its single configuration file. It contains the paths and parameters for corpus collection, meaning assignment, filtering, generation, augmentation, triplet construction, training, evaluation, W&B, and Hugging Face uploads.
+Datasets, generated outputs, and model weights are excluded from Git and must be obtained or generated separately.
 
-Run commands from the repository root. The shell runners read this file automatically; use `--config PATH` when a separate experiment configuration is required. Python modules also read it through the `PIPELINE_CONFIG` environment variable.
+## Code Information
 
-## Environment setup
+| Location | Purpose |
+| --- | --- |
+| `collect_sentences/` | Extract corpus sentences and generate examples for rare senses. |
+| `local_datasets/semi_supervised_2/` | Assign senses, filter benchmark overlap, merge examples, and build triplets. |
+| `augment/` | Back-translation, masking, dropout, token shuffling, and combined augmentation. |
+| `services/` | WSD inference, pooling, data utilities, and model training. |
+| `eval/` | WSD, zero-shot LLM, STS-UK, and MTEB evaluation. |
+| `scripts/` | Experiment evaluation, result summaries, corpus-frequency plotting, and sense-availability analysis. |
 
-Run from the repository root:
+Paths, models, thresholds, and experiment settings are defined in [project_config.ini](project_config.ini). Python modules use this file by default; set `PIPELINE_CONFIG` to use another configuration. Shell runners also accept `--config PATH`. Older experiments are kept in `local_datasets/archive/`.
+
+## Usage Instructions
+
+Run all commands from the repository root. The commands below follow the research workflow. `cuda:3` selects GPU index 3; adjust device arguments and the GPU indices in `project_config.ini` for your machine.
+
+### 1. Set up the environment and data
 
 ```bash
 python3.11 -m venv .venv
 source .venv/bin/activate
-
-python -m pip install --upgrade pip setuptools wheel
 python -m pip install -r requirements.txt
-python -m pip install -r requirements-notebooks.txt
 python -m spacy download uk_core_news_sm
 ```
 
-For OpenAI sentence generation, copy `.env.example` to `.env` in the repository root and set `OPENAI_API_KEY`. Generation loads this file automatically without overriding exported environment variables. Keep the model, minimum example count, and seed in `[generation]` in `project_config.ini`; `--model` and `OPENAI_MODEL` can override the configured model. The `.env` file is ignored by Git; never commit credentials. Other entry points, including the pseudo-label audit, may still require credentials exported in the terminal.
-
-If UDPipe is not available from the package index, install the local source archive:
-
-```bash
-python -m pip install ./models/ufal.udpipe-1.2.0.1.tar.gz
-```
-
-Verify the environment:
-
-```bash
-find . -path './.venv' -prune -o -path './.git' -prune -o -name '*.py' -print0 \
-  | xargs -0 python -m py_compile
-python -c "import torch, transformers, sentence_transformers, pandas, ufal.udpipe; print('Core dependencies OK')"
-```
-
-## Required assets
-
-Place these files in the following locations:
+Download the benchmark and the Ukrainian UDPipe model, and place them at:
 
 ```text
+datasets_pre_defined/ukrainian_wsd_benchmark.jsonl
 models/20180506.uk.mova-institute.udpipe
-datasets_pre_defined/ukrainian_wsd_benchmark.jsonl
-datasets_pre_defined/unique_lemmas_homonyms.txt
 ```
 
-The UDPipe Python package and the trained UDPipe model are separate assets. The package provides the API; the `.udpipe` file provides the Ukrainian tokenizer and tagger model.
+The UDPipe model file is separate from the `ufal.udpipe` Python package. For corpus collection, also download the three UberText subsets listed above into `datasets_pre_defined/`. Their expected filenames are in `[collection]` in `project_config.ini`.
 
-## Install translation augmentation models
-
-The translation and combined augmentation scripts use CTranslate2 models. These models are not downloaded automatically when the augmentation scripts start. Convert them once after installing the project dependencies.
-
-Run from the repository root:
+Create the target-lemma list from the benchmark:
 
 ```bash
-mkdir -p models/translators
-
-./.venv/bin/ct2-transformers-converter \
-  --model Helsinki-NLP/opus-mt-tc-big-zle-en \
-  --output_dir models/translators/opus-mt-zle-en-ct2 \
-  --quantization float16
-
-./.venv/bin/ct2-transformers-converter \
-  --model Helsinki-NLP/opus-mt-tc-big-en-zle \
-  --output_dir models/translators/opus-mt-en-zle-ct2 \
-  --quantization float16
+python - <<'PYTHON'
+import json
+from pathlib import Path
+records = Path('datasets_pre_defined/ukrainian_wsd_benchmark.jsonl').read_text(encoding='utf-8').splitlines()
+lemmas = sorted({json.loads(line)['lemma'] for line in records if line.strip()})
+Path('datasets_pre_defined/unique_lemmas_homonyms.txt').write_text('\n'.join(lemmas) + '\n', encoding='utf-8')
+PYTHON
 ```
 
-The converter downloads the original Hugging Face checkpoints and saves the converted models locally at:
-
-```text
-models/translators/opus-mt-zle-en-ct2
-models/translators/opus-mt-en-zle-ct2
-```
-
-These models are required for back-translation and combined augmentation. They are not required for evaluation, sentence collection, dropout, or token-shuffling augmentation.
-
-The active benchmark is:
-
-```text
-datasets_pre_defined/ukrainian_wsd_benchmark.jsonl
-```
-
-It contains one sense record per JSONL line with:
-
-```text
-lemma, gloss, examples
-```
-
-## Download UberText corpora
-
-On Linux, use `wget`:
+### 2. Evaluate the baselines
 
 ```bash
-cd datasets_pre_defined
-
-wget -O ubertext.news.filter_rus_gcld+short.text_only.txt.bz2 \
-  https://lang.org.ua/static/downloads/ubertext2.0/news/sentenced/ubertext.news.filter_rus_gcld+short.text_only.txt.bz2
-
-wget -O ubertext.fiction.filter_rus_gcld+short.text_only.txt.bz2 \
-  https://lang.org.ua/static/downloads/ubertext2.0/fiction/sentenced/ubertext.fiction.filter_rus_gcld+short.text_only.txt.bz2
-
-wget -O ubertext.wikipedia.filter_rus_gcld+short.text_only.txt.bz2 \
-  https://lang.org.ua/static/downloads/ubertext2.0/wikipedia/sentenced/ubertext.wikipedia.filter_rus_gcld+short.text_only.txt.bz2
-
-cd ..
+./eval_all_wsd_models.sh --device cuda:3 --delete-model-after-evaluation
+./eval_all_llm_wsd_models.sh --device cuda:3 --delete-model-after-evaluation
 ```
 
-## Evaluate models
+These evaluate the encoder and zero-shot LLM lists in `project_config.ini`. Encoder results go to `wsd_model_results.csv`; LLM results, predictions, and metadata go to `results/wsd_llm_*`. The cleanup flag removes downloaded models after successful evaluation. The encoder evaluator also deletes explicitly supplied local model paths.
 
-Evaluate one model:
+Encoder evaluation uses target-token pooling for contexts and sentence mean pooling for definitions. Accuracy is calculated over retained dictionary-sense rows; excluded rows are logged.
 
-```bash
-python -m eval.eval_wsd \
-  --model-path sentence-transformers/paraphrase-multilingual-mpnet-base-v2 \
-  --tokenizer-path sentence-transformers/paraphrase-multilingual-mpnet-base-v2 \
-  --benchmark-path datasets_pre_defined/ukrainian_wsd_benchmark.jsonl \
-  --device cpu \
-  --no-reports
-```
+### 3. Prepare training data
 
-Evaluate the configured model list:
-
-```bash
-./eval_all_wsd_models.sh
-```
-
-Results are written to:
-
-```text
-wsd_model_results.csv
-```
-
-The batch evaluator runs on CPU by default and continues if an individual model fails.
-
-WSD inference uses target-token pooling for benchmark sentences by default.
-Use `--anchor-pooling sentence` for full-sentence pooling; dictionary definitions
-always use full-sentence mean pooling. This inference option is independent of
-the training `pool_targets` setting. The CSV records the selected `anchor_pooling`.
-The existing accuracy calculation excludes rows with missing predictions.
-Target-token extraction can fail while sentence pooling does not require it,
-so the scored rows can differ between modes; total, scored, and excluded
-dictionary-sense row counts are logged for each evaluation.
-
-Evaluate the two MPNet baselines with both inference pooling modes on the server:
-
-```bash
-for pooling in sentence target; do
-  ./eval_all_wsd_models.sh \
-    --device cuda:0 \
-    --anchor-pooling "$pooling" \
-    --models sentence-transformers/paraphrase-multilingual-mpnet-base-v2 \
-             lang-uk/ukr-paraphrase-multilingual-mpnet-base \
-    --output "results/wsd_baselines_${pooling}.csv" || break
-done
-```
-
-These commands keep downloaded models cached between pooling modes and save
-separate CSVs, without overwriting `wsd_model_results.csv`.
-
-### WSD accuracy by natural sense availability
-
-Analyze Natural, Natural + Generation, and Natural + Generation + Back-translation
-across both training PT settings and the three configured training seeds:
-
-```bash
-./eval_wsd_by_sense_availability.sh --plan-only
-./eval_wsd_by_sense_availability.sh --device cuda:0 --resume
-```
-
-This runs WSD only (18 checkpoints by default), with the existing
-maximum-over-examples strategy and target-token inference for every checkpoint.
-It does not retrain, run STS/MTEB, or change/upload the original experiment results.
-Final checkpoints are loaded locally when available, otherwise from their recorded
-Hugging Face URLs (or the configured repository prefix). Downloads remain cached.
-
-To free disk space after each checkpoint:
-
-```bash
-./eval_wsd_by_sense_availability.sh --device cuda:0 --resume --delete-model-after-evaluation
-```
-
-This deletes only the evaluated Hugging Face cache revision after predictions are
-saved (including already cached copies). Local training checkpoints, other model
-repositories, and other revisions are retained. Verified resumed runs can also
-clean up their cached revision without repeating inference. Failed evaluations
-are not cleaned up; cleanup errors are logged without invalidating saved results.
-Do not use this option while another process needs the same cached checkpoint.
-No models or results are deleted from Hugging Face itself.
-
-The `[bucket_analysis]` configuration selects conditions, training poolings, and
-output directory. Seeds come from `[experiments]`. Override these with
-`--conditions`, `--training-poolings`, `--seeds`, or `--output-dir`.
-Buckets `0`, `1-4`, `5-19`, and `>=20` count unique natural sentences per exact
-lemma/definition in `[paths] filtered_grouped`, after benchmark-overlap filtering
-and before generation or transformations. Missing definitions raise an error;
-they are not silently counted as zero.
-
-Outputs in `results/wsd_sense_availability/`:
-
-- `bucket_tables.tex`: one paper table per training pooling, without a count column.
-- `bucket_summary.csv`: mean accuracy and sample standard deviation over training seeds.
-- `bucket_gains.csv`: paired generation gains and additional transformation gains.
-- `predictions/`: complete per-record predictions and checkpoint provenance for each run.
-- `per_run_bucket_metrics.csv`, `bucket_details.json`, and `bucket_membership.json`:
-  supporting counts, exclusions, and per-seed scores.
-- `manifest.json`, `failures.json`, and `run.log`: reproducibility and execution details.
-
-All bucket comparisons use the same intersection of successfully scored records
-across the requested checkpoints. Original overall accuracy is also recorded for
-comparison with existing metrics; common-record bucket scores need not aggregate
-to that original score if exclusions differ. Completed predictions can be reused
-with `--resume` only when input hashes, checkpoint fingerprint/revision, inference
-code, device, and recorded dependency versions still match. Model failures do not
-erase completed predictions; fix the error and resume. No partial table is generated.
-
-To delete each successfully evaluated model from the local Hugging Face cache and
-save disk space, use:
-
-```bash
-./eval_all_wsd_models.sh --delete-model-after-evaluation
-```
-
-Failed evaluations are retained so they can be diagnosed and rerun. Explicit local
-model directories passed through `--models` are also deleted after successful evaluation.
-
-To use a CUDA GPU on a Linux server, call the Python evaluator directly:
-
-```bash
-python -m eval.eval_all_wsd_models \
-  --benchmark-path datasets_pre_defined/ukrainian_wsd_benchmark.jsonl \
-  --device cuda:0 \
-  --output wsd_model_results_gpu.csv
-```
-
-The root `eval_all_wsd_models.sh` launcher intentionally uses CPU by default for macOS.
-
-Evaluate the eight zero-shot LLMs from the paper on CUDA:
-
-```bash
-./eval_all_llm_wsd_models.sh --device cuda:0
-```
-
-The model list and defaults are in `[llm_evaluation]` in `project_config.ini`.
-The evaluator uses the Ukrainian prompt from Supplementary Methods S2, presents
-all candidate meanings, and evaluates each benchmark sentence separately. It
-runs models sequentially on the selected GPU, using greedy decoding, seed 42,
-and bfloat16 where supported (`--dtype auto`). These are explicit defaults for
-this implementation; the paper does not document all original decoding settings.
-It shows a tqdm progress bar with ETA, running accuracy, and invalid-answer count.
-On CUDA OOM, it reduces the batch size and retries the same examples.
-WSD uses text inputs only: the evaluator loads the tokenizer and the model's
-original chat template directly, without constructing an image/video processor.
-Legacy `chat_template.json` files are supported alongside tokenizer chat templates.
-
-To save disk space, delete each downloaded model after a successful evaluation:
-
-```bash
-./eval_all_llm_wsd_models.sh --device cuda:0 --delete-model-after-evaluation
-```
-
-Cleanup runs after CSV results are saved and model memory is released. It deletes
-only the corresponding Hugging Face model cache entry, including its cached
-revisions and weight files, and logs the expected freed space. Failed/interrupted
-models and explicit local model directories are retained. A later evaluation of
-the same Hugging Face model will download it again.
-
-Artifacts are appended with a unique `run_id`:
-
-- `results/wsd_llm_results.csv`: one summary per model, including accuracy,
-  completion status, invalid-answer count, example counts, and duration. Columns:
-  `run_id,model,status,accuracy_percent,invalid_answers,processed_examples,total_examples,duration_seconds`.
-- `results/wsd_llm_metadata.jsonl`: detailed records linked by `run_id` and `model`,
-  including settings, model revisions, benchmark/prompt hashes, library versions,
-  exact correct-prediction counts, and errors.
-- `results/wsd_llm_predictions.csv`: one row per sentence, with candidate meanings,
-  gold/predicted sense numbers, correctness, and the raw model answer.
-- `results/wsd_llm_eval.log`: running logs, progress summaries, and error traces.
-
-Predictions are flushed after every batch; summaries and metadata after each model.
-An existing wide summary CSV is automatically converted to the compact format.
-Its original contents are backed up as `wsd_llm_results.csv.full_columns.bak`,
-and the full historical rows are copied to the metadata file.
-Invalid answers count as incorrect. Failed or interrupted models report accuracy on the
-processed examples only; check `status` and `processed_examples` before comparison.
-The expected answer is a single one-based sense number (an optional trailing
-period or parenthesis is accepted). Answers containing explanations are invalid.
-
-Smoke test one model before the full run:
-
-```bash
-./eval_all_llm_wsd_models.sh \
-  --models Qwen/Qwen3-VL-2B-Instruct \
-  --device cuda:0 --max-examples 20 --batch-size 2
-```
-
-Use `--config PATH`, `--models ID ...`, `--output PATH`, `--predictions-output PATH`,
-`--metadata-output PATH`, or `--log-file PATH` to override defaults. Models download automatically. Use a
-Transformers version supporting Qwen3-VL (`>=4.57.0`) and Accelerate. For gated
-Gemma models, accept the license on Hugging Face and authenticate with `hf auth login`.
-
-## Collect sentences
-
-The collector is CPU-based. The current implementation starts approximately half of the available CPU count as multiprocessing workers, and each worker may load the large UDPipe model. Use a Linux server with sufficient RAM for full-corpus collection when possible.
-
-Use separate output files because collection outputs are appended to existing files.
-
-The current collector version does not expose a `--workers` option. The previous macOS-safe worker initializer is not present in this checkout, so collection may stall on macOS when using the default `spawn` multiprocessing behavior. Run collection on Linux, or restore the worker-initializer change before running it locally on macOS.
-
-For a smoke test:
-
-```bash
-python -m collect_sentences.collect_ubertext_sentences \
-  --source_dataset datasets_pre_defined/ubertext.news.filter_rus_gcld+short.text_only.txt.bz2 \
-  --save_dataset local_datasets/raw_sentences/test.json \
-  --num_examples 10 \
-  --save_every 1
-```
-
-For the three full corpora:
+Use Linux for full-corpus collection. Collect each subset, then merge and deduplicate the sentences:
 
 ```bash
 python -m collect_sentences.collect_ubertext_sentences \
@@ -347,53 +91,127 @@ python -m collect_sentences.collect_ubertext_sentences \
   --source_dataset datasets_pre_defined/ubertext.wikipedia.filter_rus_gcld+short.text_only.txt.bz2 \
   --save_dataset local_datasets/raw_sentences/lemma_examples_wikipedia.json \
   --num_examples -1
-```
 
-Merge and deduplicate all JSON collection outputs:
-
-```bash
 python -m local_datasets.raw_sentences.process_raw_sentences
+python -m local_datasets.semi_supervised_2.assign_meaning_to_sentence --device cuda
+python -m local_datasets.semi_supervised_2.delete_similar_sentences
+python -m scripts.analyze_wsd_by_sense_availability
 ```
 
-Output:
+Collection appends to its output files; use fresh files when restarting collection. The availability analysis runs after filtering and reports the percentage of definitions with fewer than five natural examples.
 
-```text
-local_datasets/raw_sentences/unique_lemma_sentences.jsonl
-```
-
-## Fine-tune the paper configurations
-
-After generating the triplet CSV files with `./generate_all_triplets.sh`, run:
+For sentence generation, copy `.env.example` to `.env` and set `OPENAI_API_KEY`. The research command explicitly selects the generation model, overriding `[generation]`:
 
 ```bash
+python -m collect_sentences.generate_sentences_4_absent_meanings --model gpt-5.6-luna
+python -m local_datasets.semi_supervised_2.merge_collected_and_generated
+```
+
+Before back-translation, convert the two translation models:
+
+```bash
+mkdir -p models/translators
+
+./.venv/bin/ct2-transformers-converter \
+  --model Helsinki-NLP/opus-mt-tc-big-zle-en \
+  --output_dir models/translators/opus-mt-zle-en-ct2 \
+  --quantization float16 --force
+./.venv/bin/ct2-transformers-converter \
+  --model Helsinki-NLP/opus-mt-tc-big-en-zle \
+  --output_dir models/translators/opus-mt-en-zle-ct2 \
+  --quantization float16 --force
+```
+
+Set the augmentation GPU indices in `[augmentation]` for your machine, then run:
+
+```bash
+./run_all_augmentations.sh
+./generate_all_triplets.sh
+```
+
+### 4. Fine-tune and evaluate
+
+Set your Hugging Face repository prefix and W&B project in `project_config.ini`, then authenticate:
+
+```bash
+hf auth login
 wandb login
-huggingface-cli login
-
-export WANDB_PROJECT=ucu-wsd-finetuning
-# Set this only when logging to a W&B team/entity:
-# export WANDB_ENTITY=your-wandb-team
-
-./run_finetuning_experiments.sh \
-  --config project_config.ini \
-  --gpus 0,1,2,3 \
-  --hf-repo-prefix YOUR_HF_USERNAME/ucu-wsd \
-  --delete-local-model
+./run_finetuning_experiments.sh --delete-local-model
 ```
 
-The runner excludes the two pretrained baseline rows and trains:
+This runs eight data configurations with two training pooling modes and three seeds (48 runs), using the configured GPUs. Each final checkpoint is evaluated on WSD, STS-UK, and Ukrainian MTEB tasks, logged to W&B, and uploaded to Hugging Face. `--delete-local-model` removes final and best local checkpoints only after a successful upload. Per-run results remain in the configured results directory; the summary is saved to `results/finetuning_summary_aug16.csv`.
 
-```text
-8 training configurations × 2 pooling modes × 3 training seeds = 48 runs
+The eight conditions are Natural, Natural + Generation, and generation combined with masking, word deletion (dropout), back-translation, shuffling, stochastic combination, or pooled augmentations (`all_combined`). The pooled condition samples from the individual and stochastic augmentation outputs.
+
+### 5. Evaluate WSD by natural sense availability
+
+```bash
+./eval_wsd_by_sense_availability.sh --device cuda:3 --resume --delete-model-after-evaluation
 ```
 
-Each GPU runs one independent experiment. Batch size defaults to `104` to match the paper. For a throughput-oriented run on 48 GB RTX 6000 cards, use `--batch-size 208`; this changes the optimization setup and is not an exact paper reproduction.
+This compares Natural, Natural + Generation, and Natural + Generation + Back-translation checkpoints across both training pooling modes and three seeds. Senses are grouped by their number of natural examples after filtering: 0, 1-4, 5-19, and 20 or more. The script loads local checkpoints or their Hugging Face copies, reuses verified predictions with `--resume`, and removes evaluated cache revisions with the cleanup flag. Tables, summaries, and predictions are saved in `results/wsd_sense_availability/`.
 
-`--delete-local-model` removes the final and best checkpoints after a successful Hugging Face upload. A temporary local copy is still required during training, evaluation, and upload; if the upload fails, the local checkpoint is retained.
+`bucket_tables.tex` contains the paper tables, `bucket_summary.csv` contains mean accuracy and sample standard deviation across seeds, and `bucket_gains.csv` contains paired augmentation gains. Comparisons use the same intersection of successfully scored records across all requested checkpoints.
 
-Models are saved locally under:
+### 6. Other analyses reported in the paper
 
-```text
-models/fine-tuned-models/
+**Corpus coverage** Lemma frequencies and coverage are calculated from `unique_lemma_sentences.jsonl` against the benchmark inventory. Definition coverage is calculated from the grouped datasets before and after benchmark-overlap filtering. `scripts.analyze_wsd_by_sense_availability` reports the percentage of definitions with fewer than five natural examples in the filtered dataset.
+
+To render the top-15 lemma frequency figure:
+
+```bash
+python -m pip install matplotlib
+python -m scripts.plot_ubertext_frequency
 ```
 
-Each run is evaluated on the Ukrainian WSD benchmark, STS-UK, and Ukrainian MTEB tasks. Metrics are saved under `results/finetuning/`, summarized in `results/finetuning_summary.csv`, logged to W&B, and uploaded with the model to a separate Hugging Face model repository.
+This requires `results/ubertext_coverage/statistics.json`, a separately prepared summary excluded from Git. The plot reads its `corpus.top_20` list of `lemma`/`count` records; the pipeline does not generate this summary automatically.
+
+**Triplet counts and repeated runs** Table 8 counts training rows after the group-based split, excluding validation rows. For overall WSD, STS, and MTEB comparisons, group runs by data configuration and training pooling, then report mean and sample standard deviation over seeds 42, 123, and 456 (`ddof=1`). The fine-tuning summary CSV contains per-run scores; it does not calculate these grouped statistics. Per-task MTEB scores are in each run's `metrics.json` and `mteb_results/`.
+
+**Sentence-level comparisons** The training runner evaluates fine-tuned checkpoints automatically. Evaluate the two pretrained comparison models separately:
+
+```bash
+python -m eval.eval_stsb --device cuda:3 \
+  --models sentence-transformers/paraphrase-multilingual-mpnet-base-v2 \
+           lang-uk/ukr-paraphrase-multilingual-mpnet-base
+python -m eval.eval_mteb --device cuda:3 \
+  --models sentence-transformers/paraphrase-multilingual-mpnet-base-v2 \
+           lang-uk/ukr-paraphrase-multilingual-mpnet-base
+```
+
+STS correlations are saved to `sts_results.csv`; baseline MTEB scores are saved under `eval/mteb_results/`. Both use full-sentence embeddings, regardless of the checkpoint's training pooling. The current STS evaluators set the reference similarity to 1.0 for identical sentence pairs.
+
+## Requirements
+
+Python 3.10 or 3.11. Main dependencies include PyTorch, Transformers, Sentence Transformers, NumPy, pandas, SciPy, scikit-learn, spaCy, UDPipe, CTranslate2, OpenAI, and MTEB. The full list is in [requirements.txt](requirements.txt). Corpus-frequency plotting additionally requires Matplotlib. Dependency versions are not pinned.
+
+CPU evaluation is supported. Training and GPU-based augmentation require CUDA; full-corpus processing requires substantial RAM and disk space. The paper's training runs used NVIDIA RTX 6000 Ada GPUs with 48 GB memory. Internet access is needed for model and evaluation-dataset downloads, and an OpenAI API key is needed for sentence generation. W&B logging and Hugging Face uploads are optional.
+
+## Methodology
+
+1. Extract sentences containing the benchmark lemmas from UberText 2.0 and deduplicate them.
+2. Assign candidate senses by comparing sentence and definition embeddings. Retain assignments with probability at least 0.9 and cosine similarity at least 0.6.
+3. Remove corpus sentences with cosine similarity of at least 0.95 to any benchmark example.
+4. Generate examples for senses with fewer than five sentences, then apply the selected transformations to contexts and definitions.
+5. Construct triplets: a context, its assigned definition, and a competing definition for the same lemma, with a budget of up to 100 triplets per definition. Keep each original context and its augmented variants in the same training or validation partition.
+6. Fine-tune `paraphrase-multilingual-mpnet-base-v2` with cosine triplet loss, comparing sentence and target-token anchor pooling. Evaluate sense discrimination and general sentence-embedding performance.
+
+Default training settings are batch size 104, learning rate `2e-6`, up to two epochs, and training seeds 42, 123, and 456. The manuscript provides the full experimental protocol.
+
+## Citations
+
+When using this code, cite the accompanying manuscript:
+
+Muryn, V., and Laba, Y. *Improving Ukrainian word sense disambiguation with sense-aware sentence embeddings*. Manuscript prepared for submission to PeerJ.
+
+Related resources:
+
+- Laba, Y. (2026). *Ukrainian WSD Benchmark*. [doi:10.57967/hf/10571](https://doi.org/10.57967/hf/10571).
+- Chaplynskyi, D. (2023). [Introducing UberText 2.0: A Corpus of Modern Ukrainian at Scale](https://aclanthology.org/2023.unlp-1.1/). UNLP, pp. 1-10.
+- Laba, Y., Mudryi, V., Chaplynskyi, D., Romanyshyn, M., and Dobosevych, O. (2023). [Contextual Embeddings for Ukrainian: A Large Language Model Approach to Word Sense Disambiguation](https://aclanthology.org/2023.unlp-1.2/). UNLP, pp. 11-19.
+
+## License & Contribution Guidelines
+
+No code license is currently declared in this repository. Datasets and pretrained models retain their respective licenses.
+
+Report bugs through issues, including the command, configuration, and error output. Contributions can be submitted as pull requests with a short description of the change and how it was checked.
